@@ -43,6 +43,16 @@ button.theme { background: var(--surface); color: var(--ink2); border: 1px solid
 .panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px; min-width: 0; }
 .panel.wide { grid-column: 1 / -1; }
 .panel h2 { font-size: 15px; margin: 0; }
+.phead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fs { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+  background: none; border: 1px solid var(--ring); border-radius: 6px; color: var(--ink2); cursor: pointer; }
+.fs:hover, .fs:focus-visible { color: var(--ink); background: var(--grid); }
+.panel.is-full { position: fixed; inset: 0; z-index: 100; margin: 0; border-radius: 0; border: 0;
+  display: flex; flex-direction: column; padding: 16px; background: var(--surface); }
+.panel.is-full .chart { height: auto; flex: 3 1 0; min-height: 0; }
+.panel.is-full .chart.sub { flex: 1 1 0; }
+.panel.is-full .tablewrap { flex: none; max-height: 32vh; overflow: auto; }
+body.has-full { overflow: hidden; }
 .panel .desc { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
 .readout { color: var(--ink2); font-size: 12px; min-height: 18px; font-variant-numeric: tabular-nums;
   display: flex; flex-wrap: wrap; gap: 4px 14px; }
@@ -78,6 +88,7 @@ footer li { margin: 2px 0; }
       <li>MVRV Z-Score = (시가총액 − 실현 시가총액) / 그 시점까지의 누적 시가총액 표준편차 (2010-07부터 누적, 사후 정보 없음). 온체인 패널 표시는 2011-01부터.</li>
       <li>파워로 밴드: log10(가격) ~ log10(제네시스 이후 일수) 최소제곱 적합, 잔차 분위수(5/25/50/75/95%)로 밴드 설정. 이 대시보드 자체 정의이며 2030년까지는 외삽.</li>
       <li>해시리본: 해시레이트 30D/60D SMA. Buy = 30D&lt;60D 구간 후 30D가 60D 위로 복귀하고 가격 10D SMA &gt; 20D SMA 인 첫 날 (Capriole 공개 정의).</li>
+      <li>BTC 가격 카드: Coinbase BTC-USD 실시간 시세(30초 주기, 브라우저 직접 조회). 차트와 지표는 일 종가 기준.</li>
       <li>공포·탐욕: <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">alternative.me</a>. 김치프리미엄: 브라우저가 Upbit·Binance 시세와 <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates By Exchange Rate API</a> 환율을 직접 조회해 계산 (USDT≈USD 가정, 일부 지역에서는 Binance 접속 불가).</li>
       <li>개인 연구용 비상업 프로젝트입니다. 투자 조언이 아닙니다. 매일 GitHub Actions로 다시 빌드됩니다.</li>
       <li>무료 전체 이력 소스가 없어 제외한 지표: 손실 주소 수, 공급 대비 이익/손실, HODL Waves, 현물 ETF 순유입.</li>
@@ -176,12 +187,36 @@ function readout(el, chartsList, items) {
 }
 const lastVal = v => { for (let i = v.length - 1; i >= 0; i--) if (v[i] != null) return v[i]; return null; };
 
+// 전체 화면: 패널을 화면 전체로 펼치고, 지원 브라우저에서는 Fullscreen API까지 요청한다(미지원 시 창 안에서만 확대).
+const ICON_EXPAND = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>';
+const ICON_COLLAPSE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/></svg>';
+function setFull(el, on) {
+  el.classList.toggle('is-full', on);
+  document.body.classList.toggle('has-full', !!document.querySelector('.panel.is-full'));
+  const btn = el.querySelector('.fs');
+  btn.innerHTML = on ? ICON_COLLAPSE : ICON_EXPAND;
+  const label = on ? '전체 화면 종료 (Esc)' : '전체 화면';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  if (on && el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {});
+  if (!on && document.fullscreenElement === el) document.exitFullscreen().catch(() => {});
+}
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) document.querySelectorAll('.panel.is-full').forEach(el => setFull(el, false));
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.panel.is-full').forEach(el => setFull(el, false));
+});
+
 function panel(title, desc, { wide = false, subs = 0 } = {}) {
   const el = document.createElement('article');
   el.className = 'panel' + (wide ? ' wide' : '');
-  el.innerHTML = `<h2>${title}</h2><div class="desc">${desc}</div><div class="readout"></div><div class="chart"></div>` +
+  el.innerHTML = `<div class="phead"><h2>${title}</h2><button class="fs" type="button"></button></div>` +
+    `<div class="desc">${desc}</div><div class="readout"></div><div class="chart"></div>` +
     '<div class="chart sub"></div>'.repeat(subs);
   document.getElementById('grid').appendChild(el);
+  setFull(el, false);
+  el.querySelector('.fs').onclick = () => setFull(el, !el.classList.contains('is-full'));
   const [main, ...sub] = el.querySelectorAll('.chart');
   return { el, ro: el.querySelector('.readout'), main, sub };
 }
@@ -197,7 +232,7 @@ const plZone = q => q < 0.05 ? '매우 저평가' : q < 0.25 ? '저평가' : q <
 const nuplZone = v => v < 0 ? '항복' : v < 0.25 ? '희망·공포' : v < 0.5 ? '낙관·불안' : v < 0.75 ? '믿음·부정' : '도취·탐욕';
 const fngLast = D.fng.v[D.fng.v.length - 1];
 const tiles = [
-  ['BTC 가격', fmtUsd(lastVal(oc.price)), `Coin Metrics 일 종가 ${fmtDate(D.asof.onchain)}`],
+  ['BTC 가격 <span class="live">실시간</span>', fmtUsd(lastVal(oc.price)), `불러오는 중 · 표시값은 ${fmtDate(D.asof.onchain)} 일 종가`, 'price'],
   ['김치프리미엄 <span class="live">실시간</span>', '…', '불러오는 중', 'kimchi'],
   ['공포·탐욕', String(fngLast), (fngLast < 25 ? '극단적 공포' : fngLast < 45 ? '공포' : fngLast <= 55 ? '중립' : fngLast <= 75 ? '탐욕' : '극단적 탐욕') +
     ' · 출처 <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">alternative.me</a>'],
@@ -235,8 +270,22 @@ async function loadKimchi() {
     el.querySelector('.n').textContent = `조회 실패: ${e.message}`;
   }
 }
-loadKimchi();
-setInterval(loadKimchi, 30000);
+// 실시간 가격 = Coinbase BTC-USD (24h 시가 대비 변화 포함). 실패 시 빌드 시점의 일 종가를 그대로 둔다.
+async function loadPrice() {
+  const el = document.getElementById('price');
+  try {
+    const s = await getJson('https://api.exchange.coinbase.com/products/BTC-USD/stats');
+    const last = +s.last, open = +s.open;
+    el.querySelector('.v').textContent = fmtUsd(last);
+    el.querySelector('.n').textContent = `24h ${fmtPct(last / open - 1, 2)} · Coinbase BTC-USD (${new Date().toLocaleTimeString('ko-KR')})`;
+  } catch (e) {
+    el.querySelector('.v').textContent = fmtUsd(lastVal(oc.price));
+    el.querySelector('.n').textContent = `실시간 조회 실패(${e.message}) · ${fmtDate(D.asof.onchain)} 일 종가`;
+  }
+}
+const refreshLive = () => { loadPrice(); loadKimchi(); };
+refreshLive();
+setInterval(refreshLive, 30000);
 
 // ---------- panels ----------
 const M = D.monthly, W = D.weekly;
