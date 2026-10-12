@@ -37,3 +37,7 @@ python3 build.py out/x.html # 출력 경로 지정
 | 김치프리미엄 | Upbit · Binance 공개 시세, [Rates By Exchange Rate API](https://www.exchangerate-api.com) | 환율 데이터 재배포 금지 → 빌드하지 않고 브라우저가 직접 조회 |
 
 Coin Metrics 데이터가 비상업 라이선스이므로 이 프로젝트도 비상업적 개인 연구용이다. 투자 조언이 아니다.
+
+## 라이선스
+
+코드는 [MIT](LICENSE). 단, 대시보드가 표시하는 데이터는 위 표의 각 제공자 조건을 따른다(MIT 적용 대상 아님).
