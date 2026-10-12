@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC 사이클 대시보드</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+.sub { color: var(--muted); font-size: 12px; }
+button.theme { background: var(--surface); color: var(--ink2); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0 20px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 12px 14px; }
+.tile .k { color: var(--ink2); font-size: 12px; }
+.tile .v { font-size: 22px; font-weight: 600; margin-top: 2px; }
+.tile .n { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.tile a, footer a, .desc a { color: inherit; }
+.live { font-size: 10px; color: var(--muted); border: 1px solid var(--ring); border-radius: 6px; padding: 0 4px; margin-left: 4px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px; min-width: 0; }
+.panel.wide { grid-column: 1 / -1; }
+.panel h2 { font-size: 15px; margin: 0; }
+.panel .desc { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+.readout { color: var(--ink2); font-size: 12px; min-height: 18px; font-variant-numeric: tabular-nums;
+  display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.readout i { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; }
+.chart { width: 100%; height: 300px; }
+.chart.sub { height: 130px; border-top: 1px solid var(--grid); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink2); font-weight: 500; }
+.tablewrap { overflow-x: auto; }
+footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+footer li { margin: 2px 0; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } .chart { height: 240px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>BTC 사이클 대시보드</h1>
+      <div class="sub" id="asof"></div>
+    </div>
+    <button class="theme" id="themeBtn" type="button">테마 전환</button>
+  </header>
+  <section class="tiles" id="tiles"></section>
+  <section class="grid" id="grid"></section>
+  <footer>
+    <strong>데이터 출처 (모두 무료 공개 API)</strong>
+    <ul>
+      <li>캔들(월봉·주봉): Bitstamp BTC/USD 일봉(2011-08~), UTC 기준 리샘플. 현재 봉은 미완성.</li>
+      <li>온체인: <a href="https://coinmetrics.io/" target="_blank" rel="noopener">Coin Metrics Community</a> (CC BY-NC 4.0) — PriceUSD, CapMrktCurUSD, CapMVRVCur, SplyCur, HashRate. 실현 시가총액 = 시가총액 / MVRV, 실현가격 = 실현 시가총액 / 공급량, NUPL = 1 − 1/MVRV.</li>
+      <li>MVRV Z-Score = (시가총액 − 실현 시가총액) / 그 시점까지의 누적 시가총액 표준편차 (2010-07부터 누적, 사후 정보 없음). 온체인 패널 표시는 2011-01부터.</li>
+      <li>파워로 밴드: log10(가격) ~ log10(제네시스 이후 일수) 최소제곱 적합, 잔차 분위수(5/25/50/75/95%)로 밴드 설정. 이 대시보드 자체 정의이며 2030년까지는 외삽.</li>
+      <li>해시리본: 해시레이트 30D/60D SMA. Buy = 30D&lt;60D 구간 후 30D가 60D 위로 복귀하고 가격 10D SMA &gt; 20D SMA 인 첫 날 (Capriole 공개 정의).</li>
+      <li>공포·탐욕: <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">alternative.me</a>. 김치프리미엄: 브라우저가 Upbit·Binance 시세와 <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates By Exchange Rate API</a> 환율을 직접 조회해 계산 (USDT≈USD 가정, 일부 지역에서는 Binance 접속 불가).</li>
+      <li>개인 연구용 비상업 프로젝트입니다. 투자 조언이 아닙니다. 매일 GitHub Actions로 다시 빌드됩니다.</li>
+      <li>무료 전체 이력 소스가 없어 제외한 지표: 손실 주소 수, 공급 대비 이익/손실, HODL Waves, 현물 ETF 순유입.</li>
+    </ul>
+  </footer>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const LC = LightweightCharts;
+
+const PAL = {
+  light: { s1:'#2a78d6', s2:'#eb6834', s3:'#1baf7a', s4:'#eda100', s5:'#e87ba4', s7:'#6250d6', s8:'#e34948',
+           ink:'#0b0b0b', ink2:'#52514e', muted:'#898781', grid:'#e1e0d9', axis:'#c3c2b7', surface:'#fcfcfb',
+           z0:'#1c5cab', z1:'#6da7ec', z2:'#898781', z3:'#ec8f8e', z4:'#c93636' },
+  dark:  { s1:'#3987e5', s2:'#d95926', s3:'#199e70', s4:'#c98500', s5:'#d55181', s7:'#9085e9', s8:'#e66767',
+           ink:'#f0efec', ink2:'#c3c2b7', muted:'#898781', grid:'#2c2c2a', axis:'#383835', surface:'#1a1a19',
+           z0:'#3987e5', z1:'#86b6ef', z2:'#898781', z3:'#f0a3a2', z4:'#e66767' },
+};
+function currentMode() {
+  const forced = document.documentElement.dataset.theme;
+  if (forced) return forced;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+let P = PAL[currentMode()];
+const fmtAxis = v => Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : Math.abs(v) >= 1 ? (+v.toFixed(2)).toString() : (+v.toPrecision(3)).toString();
+
+const charts = [], styled = [];
+function chartOpts(log) {
+  return {
+    autoSize: true,
+    layout: { background: { color: P.surface }, textColor: P.muted, fontSize: 11,
+              fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif', attributionLogo: false },
+    grid: { vertLines: { color: P.grid }, horzLines: { color: P.grid } },
+    rightPriceScale: { borderColor: P.axis, mode: log ? LC.PriceScaleMode.Logarithmic : LC.PriceScaleMode.Normal,
+                       scaleMargins: { top: 0.08, bottom: 0.06 } },
+    timeScale: { borderColor: P.axis, minBarSpacing: 0.05 },
+    crosshair: { mode: LC.CrosshairMode.Normal },
+    localization: { locale: 'ko-KR', priceFormatter: fmtAxis },
+  };
+}
+function mkChart(el, log) { const c = LC.createChart(el, chartOpts(log)); charts.push({ c, log }); return c; }
+// styleFn(P) → 시리즈 색 옵션. 테마 전환 시 다시 적용된다.
+function add(chart, type, data, styleFn, opts = {}) {
+  const s = chart['add' + type + 'Series']({ priceLineVisible: false, lastValueVisible: false, ...opts, ...styleFn(P) });
+  s.setData(data);
+  styled.push({ s, styleFn });
+  return s;
+}
+function applyTheme() {
+  P = PAL[currentMode()];
+  charts.forEach(({ c, log }) => c.applyOptions(chartOpts(log)));
+  styled.forEach(({ s, styleFn }) => s.applyOptions(styleFn(P)));
+  recolorers.forEach(f => f());
+}
+const recolorers = [];
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+document.getElementById('themeBtn').onclick = () => {
+  document.documentElement.dataset.theme = currentMode() === 'dark' ? 'light' : 'dark';
+  applyTheme();
+};
+
+// ---------- helpers ----------
+const line = (t, v) => t.map((time, i) => v[i] == null ? { time } : { time, value: v[i] });
+const candles = d => d.t.map((time, i) => ({ time, open: d.o[i], high: d.h[i], low: d.l[i], close: d.c[i] }));
+const fmtUsd = v => v == null ? '–' : '$' + (v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toPrecision(3));
+const fmtN = (v, d = 2) => v == null ? '–' : v.toFixed(d);
+const fmtDate = t => new Date(t * 1000).toISOString().slice(0, 10);
+const fmtPct = (v, d = 1) => (v >= 0 ? '+' : '') + (v * 100).toFixed(d) + '%';
+
+function syncCharts(list) {
+  let lock = false;
+  list.forEach(src => src.timeScale().subscribeVisibleLogicalRangeChange(r => {
+    if (lock || !r) return;
+    lock = true;
+    list.forEach(dst => dst !== src && dst.timeScale().setVisibleLogicalRange(r));
+    lock = false;
+  }));
+}
+// items: [{label, role, t, v, fmt}] — 시각별 값 조회 후 readout 갱신
+function readout(el, chartsList, items) {
+  const maps = items.map(it => new Map(it.t.map((t, i) => [t, it.v[i]])));
+  // 기본 시점 = 첫 항목의 마지막 값 시점 (외삽 시리즈의 2030년 값을 '최근'으로 보여주지 않도록)
+  let lastT = null;
+  for (let i = items[0].v.length - 1; i >= 0; i--) if (items[0].v[i] != null) { lastT = items[0].t[i]; break; }
+  const render = time => {
+    const at = time == null ? lastT : time;
+    el.innerHTML = `<span>${fmtDate(at)}</span>` + items.map((it, k) => {
+      let v = maps[k].get(at);
+      return `<span><i style="background:${P[it.role]}"></i>${it.label} ${v == null ? '–' : it.fmt(v)}</span>`;
+    }).join('');
+  };
+  chartsList.forEach(c => c.subscribeCrosshairMove(p => render(p && p.time != null ? p.time : null)));
+  recolorers.push(() => render(null));
+  render(null);
+}
+const lastVal = v => { for (let i = v.length - 1; i >= 0; i--) if (v[i] != null) return v[i]; return null; };
+
+function panel(title, desc, { wide = false, subs = 0 } = {}) {
+  const el = document.createElement('article');
+  el.className = 'panel' + (wide ? ' wide' : '');
+  el.innerHTML = `<h2>${title}</h2><div class="desc">${desc}</div><div class="readout"></div><div class="chart"></div>` +
+    '<div class="chart sub"></div>'.repeat(subs);
+  document.getElementById('grid').appendChild(el);
+  const [main, ...sub] = el.querySelectorAll('.chart');
+  return { el, ro: el.querySelector('.readout'), main, sub };
+}
+const refLines = (s, levels) => levels.forEach(([price, title]) =>
+  s.createPriceLine({ price, color: P.muted, lineWidth: 1, lineStyle: LC.LineStyle.Dashed, axisLabelVisible: true, title }));
+const candleStyle = p => ({ upColor: p.s3, downColor: p.s8, borderVisible: false, wickUpColor: p.s3, wickDownColor: p.s8 });
+
+// ---------- header & tiles ----------
+const oc = D.onchain, pl = D.powerlaw;
+document.getElementById('asof').textContent =
+  `온체인 ${fmtDate(D.asof.onchain)} · 캔들 ${fmtDate(D.asof.candles)} · 빌드 ${new Date(D.asof.built * 1000).toLocaleString('ko-KR')}`;
+const plZone = q => q < 0.05 ? '매우 저평가' : q < 0.25 ? '저평가' : q < 0.75 ? '적정' : q < 0.95 ? '고평가' : '매우 고평가';
+const nuplZone = v => v < 0 ? '항복' : v < 0.25 ? '희망·공포' : v < 0.5 ? '낙관·불안' : v < 0.75 ? '믿음·부정' : '도취·탐욕';
+const fngLast = D.fng.v[D.fng.v.length - 1];
+const tiles = [
+  ['BTC 가격', fmtUsd(lastVal(oc.price)), `Coin Metrics 일 종가 ${fmtDate(D.asof.onchain)}`],
+  ['김치프리미엄 <span class="live">실시간</span>', '…', '불러오는 중', 'kimchi'],
+  ['공포·탐욕', String(fngLast), (fngLast < 25 ? '극단적 공포' : fngLast < 45 ? '공포' : fngLast <= 55 ? '중립' : fngLast <= 75 ? '탐욕' : '극단적 탐욕') +
+    ' · 출처 <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">alternative.me</a>'],
+  ['MVRV', fmtN(lastVal(oc.mvrv)), `Z-Score ${fmtN(lastVal(oc.z))}`],
+  ['NUPL', fmtN(lastVal(oc.nupl), 3), nuplZone(lastVal(oc.nupl))],
+  ['실현가격', fmtUsd(lastVal(oc.rp)), `가격/실현가격 ${fmtN(lastVal(oc.price) / lastVal(oc.rp))}×`],
+  ['파워로 위치', `${Math.round(pl.pct * 100)}%ile`, plZone(pl.pct)],
+];
+document.getElementById('tiles').innerHTML = tiles.map(([kk, v, n, id]) =>
+  `<div class="tile"${id ? ` id="${id}"` : ''}><div class="k">${kk}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
+
+// 김치프리미엄 = 업비트 KRW-BTC / (바이낸스 BTCUSDT × USD/KRW) − 1. 시세는 30초마다, 환율은 페이지 로드 시 1회(일 단위 갱신 데이터).
+const FX_LINK = '<a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates By Exchange Rate API</a>';
+let fxPromise = null;
+async function getJson(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`${new URL(url).host} HTTP ${r.status}`);
+  return r.json();
+}
+async function loadKimchi() {
+  const el = document.getElementById('kimchi');
+  try {
+    fxPromise = fxPromise || getJson('https://open.er-api.com/v6/latest/USD').catch(e => { fxPromise = null; throw e; });
+    const [upbit, binance, fx] = await Promise.all([
+      getJson('https://api.upbit.com/v1/ticker?markets=KRW-BTC'),
+      getJson('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
+      fxPromise,
+    ]);
+    const krw = upbit[0].trade_price, usdt = +binance.price, usdkrw = fx.rates.KRW;
+    el.querySelector('.v').textContent = fmtPct(krw / (usdt * usdkrw) - 1, 2);
+    el.querySelector('.n').innerHTML = `업비트 ${Math.round(krw).toLocaleString('ko-KR')}원 · 바이낸스 $${Math.round(usdt).toLocaleString('en-US')} · ₩${usdkrw.toFixed(1)}/$ ` +
+      `(${new Date().toLocaleTimeString('ko-KR')}) · ${FX_LINK}`;
+  } catch (e) {
+    el.querySelector('.v').textContent = '–';
+    el.querySelector('.n').textContent = `조회 실패: ${e.message}`;
+  }
+}
+loadKimchi();
+setInterval(loadKimchi, 30000);
+
+// ---------- panels ----------
+const M = D.monthly, W = D.weekly;
+
+{ // 파워로 밸류에이션 밴드
+  const p = panel('BTC 파워로 밸류에이션 밴드 (~2030 외삽)', `log10(가격) = ${pl.a.toFixed(2)} + ${pl.b.toFixed(3)}·log10(일수) · 잔차 분위수 5/25/50/75/95% · 현재 ${Math.round(pl.pct * 100)}%ile (${plZone(pl.pct)}) · 데이터 <a href="https://coinmetrics.io/" target="_blank" rel="noopener">Coin Metrics Community</a> (CC BY-NC 4.0)`, { wide: true });
+  const a = mkChart(p.main, true);
+  const L = pl.lines;
+  const bands = [['q95', 's8', '95%'], ['q75', 's2', '75%'], ['q50', 'muted', '50% (적합선)'], ['q25', 's3', '25%'], ['q05', 's1', '5%']];
+  bands.forEach(([key, role]) => add(a, 'Line', line(pl.t, L[key]), p => ({ color: p[role], lineWidth: key === 'q50' ? 1 : 2, lineStyle: key === 'q50' ? LC.LineStyle.Dashed : LC.LineStyle.Solid })));
+  add(a, 'Line', line(pl.t, pl.price), p => ({ color: p.ink, lineWidth: 1 }));
+  a.timeScale().fitContent();
+  readout(p.ro, [a], [{ label: '가격(주간)', role: 'ink', t: pl.t, v: pl.price, fmt: fmtUsd },
+    ...bands.map(([key, role, label]) => ({ label, role, t: pl.t, v: L[key], fmt: fmtUsd }))]);
+}
+{ // MVRV + Z
+  const p = panel('BTC MVRV · MVRV Z-Score', '상단 가격(로그) · 중간 MVRV(1.0 / 3.5) · 하단 Z-Score(0 / 7) · 데이터 <a href="https://coinmetrics.io/" target="_blank" rel="noopener">Coin Metrics Community</a> (CC BY-NC 4.0)', { wide: true, subs: 2 });
+  const a = mkChart(p.main, true), b = mkChart(p.sub[0], false), c = mkChart(p.sub[1], false);
+  add(a, 'Line', line(oc.t, oc.price), p => ({ color: p.ink, lineWidth: 1 }));
+  refLines(add(b, 'Line', line(oc.t, oc.mvrv), p => ({ color: p.s1, lineWidth: 2 })), [[1, '1.0'], [3.5, '3.5']]);
+  refLines(add(c, 'Line', line(oc.t, oc.z), p => ({ color: p.s7, lineWidth: 2 })), [[0, '0'], [7, '7']]);
+  syncCharts([a, b, c]);
+  a.timeScale().fitContent();
+  readout(p.ro, [a, b, c], [{ label: '가격', role: 'ink', t: oc.t, v: oc.price, fmt: fmtUsd },
+    { label: 'MVRV', role: 's1', t: oc.t, v: oc.mvrv, fmt: v => fmtN(v) }, { label: 'Z', role: 's7', t: oc.t, v: oc.z, fmt: v => fmtN(v) }]);
+}
+{ // NUPL
+  const p = panel('BTC NUPL (구간색)', '0 항복 · 0.25 희망 · 0.5 낙관 · 0.75 도취 — 파랑(손실) ↔ 빨강(이익) · 데이터 <a href="https://coinmetrics.io/" target="_blank" rel="noopener">Coin Metrics Community</a> (CC BY-NC 4.0)', { subs: 1 });
+  const a = mkChart(p.main, true), b = mkChart(p.sub[0], false);
+  add(a, 'Line', line(oc.t, oc.price), p => ({ color: p.ink, lineWidth: 1 }));
+  const zc = v => v < 0 ? P.z0 : v < 0.25 ? P.z1 : v < 0.5 ? P.z2 : v < 0.75 ? P.z3 : P.z4;
+  const s = add(b, 'Line', [], () => ({ lineWidth: 2 }));
+  const setN = () => s.setData(oc.t.map((time, i) => ({ time, value: oc.nupl[i], color: zc(oc.nupl[i]) })));
+  setN(); recolorers.push(setN);
+  refLines(s, [[0, ''], [0.25, ''], [0.5, ''], [0.75, '']]);
+  b.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 } });
+  syncCharts([a, b]);
+  a.timeScale().fitContent();
+  readout(p.ro, [a, b], [{ label: '가격', role: 'ink', t: oc.t, v: oc.price, fmt: fmtUsd },
+    { label: 'NUPL', role: 'z3', t: oc.t, v: oc.nupl, fmt: v => `${fmtN(v, 3)} ${nuplZone(v)}` }]);
+}
+{ // 실현가격
+  const p = panel('BTC 실현가격 (Realized Price)', '로그 · 시장 평균 취득단가 추정 · 데이터 <a href="https://coinmetrics.io/" target="_blank" rel="noopener">Coin Metrics Community</a> (CC BY-NC 4.0)');
+  const a = mkChart(p.main, true);
+  add(a, 'Line', line(oc.t, oc.price), p => ({ color: p.ink, lineWidth: 1 }));
+  add(a, 'Line', line(oc.t, oc.rp), p => ({ color: p.s2, lineWidth: 2 }));
+  a.timeScale().fitContent();
+  readout(p.ro, [a], [{ label: '가격', role: 'ink', t: oc.t, v: oc.price, fmt: fmtUsd }, { label: '실현가격', role: 's2', t: oc.t, v: oc.rp, fmt: fmtUsd }]);
+}
+{ // 월봉 + RSI
+  const p = panel('BTC 월봉 + RSI(14)', 'Bitstamp · 로그 · 월간 RSI 70/50/30', { subs: 1 });
+  const a = mkChart(p.main, true), b = mkChart(p.sub[0], false);
+  add(a, 'Candlestick', candles(M), candleStyle);
+  const r = add(b, 'Line', line(M.t, M.rsi), p => ({ color: p.s7, lineWidth: 2 }));
+  refLines(r, [[70, ''], [50, ''], [30, '']]);
+  syncCharts([a, b]);
+  a.timeScale().fitContent();
+  readout(p.ro, [a, b], [{ label: '종가', role: 's1', t: M.t, v: M.c, fmt: fmtUsd }, { label: 'RSI', role: 's7', t: M.t, v: M.rsi, fmt: v => fmtN(v, 1) }]);
+}
+{ // 월봉 볼린저
+  const p = panel('BTC 월봉 + 볼린저밴드(20, 2σ)', '로그 · 월 종가의 로그값 기준 (산술 σ는 초기 급등기에 하단이 음수가 됨)');
+  const a = mkChart(p.main, true);
+  add(a, 'Candlestick', candles(M), candleStyle);
+  add(a, 'Line', line(M.t, M.bbUp), p => ({ color: p.s2, lineWidth: 1 }));
+  add(a, 'Line', line(M.t, M.bbMid), p => ({ color: p.muted, lineWidth: 1, lineStyle: LC.LineStyle.Dashed }));
+  add(a, 'Line', line(M.t, M.bbLo), p => ({ color: p.s1, lineWidth: 1 }));
+  a.timeScale().fitContent();
+  readout(p.ro, [a], [{ label: '종가', role: 'ink2', t: M.t, v: M.c, fmt: fmtUsd }, { label: '상단', role: 's2', t: M.t, v: M.bbUp, fmt: fmtUsd },
+    { label: '중심', role: 'muted', t: M.t, v: M.bbMid, fmt: fmtUsd }, { label: '하단', role: 's1', t: M.t, v: M.bbLo, fmt: fmtUsd }]);
+}
+{ // 주봉 25W + MACD
+  const p = panel('BTC 주봉 + 25주 이동평균 + MACD(12, 26, 9)', '로그 · 주봉(월요일 시작, UTC)', { subs: 1 });
+  const a = mkChart(p.main, true), b = mkChart(p.sub[0], false);
+  add(a, 'Candlestick', candles(W), candleStyle);
+  add(a, 'Line', line(W.t, W.ma25), p => ({ color: p.s2, lineWidth: 2 }));
+  const histStyle = () => ({ color: P.muted });
+  const h = add(b, 'Histogram', [], histStyle);
+  const setHist = () => h.setData(W.t.map((time, i) => W.hist[i] == null ? { time } : { time, value: W.hist[i], color: W.hist[i] >= 0 ? P.s3 : P.s8 }));
+  setHist(); recolorers.push(setHist);
+  add(b, 'Line', line(W.t, W.macd), p => ({ color: p.s1, lineWidth: 2 }));
+  add(b, 'Line', line(W.t, W.signal), p => ({ color: p.s2, lineWidth: 1 }));
+  syncCharts([a, b]);
+  a.timeScale().setVisibleLogicalRange({ from: W.t.length - 260, to: W.t.length + 4 });
+  readout(p.ro, [a, b], [{ label: '종가', role: 'ink2', t: W.t, v: W.c, fmt: fmtUsd }, { label: '25W', role: 's2', t: W.t, v: W.ma25, fmt: fmtUsd },
+    { label: 'MACD', role: 's1', t: W.t, v: W.macd, fmt: v => fmtN(v, 0) }, { label: 'Signal', role: 's2', t: W.t, v: W.signal, fmt: v => fmtN(v, 0) }]);
+}
+{ // 200/240W + RSI
+  const p = panel('BTC 주봉 + 200·240주 이동평균 + 주간 RSI', '로그 · 장기 바닥 지지선', { subs: 1 });
+  const a = mkChart(p.main, true), b = mkChart(p.sub[0], false);
+  add(a, 'Candlestick', candles(W), candleStyle);
+  add(a, 'Line', line(W.t, W.ma200), p => ({ color: p.s1, lineWidth: 2 }));
+  add(a, 'Line', line(W.t, W.ma240), p => ({ color: p.s7, lineWidth: 2 }));
+  const r = add(b, 'Line', line(W.t, W.rsi), p => ({ color: p.s7, lineWidth: 2 }));
+  refLines(r, [[70, ''], [30, '']]);
+  syncCharts([a, b]);
+  a.timeScale().fitContent();
+  readout(p.ro, [a, b], [{ label: '종가', role: 'ink2', t: W.t, v: W.c, fmt: fmtUsd }, { label: '200W', role: 's1', t: W.t, v: W.ma200, fmt: fmtUsd },
+    { label: '240W', role: 's7', t: W.t, v: W.ma240, fmt: fmtUsd }, { label: 'RSI', role: 's7', t: W.t, v: W.rsi, fmt: v => fmtN(v, 1) }]);
+}
+{ // 해시리본
+  const p = panel('BTC 해시리본 (Hash Ribbons)', '상단 가격(로그) + Buy 신호 · 하단 해시레이트 30D/60D SMA (EH/s, 로그) · 데이터 <a href="https://coinmetrics.io/" target="_blank" rel="noopener">Coin Metrics Community</a> (CC BY-NC 4.0)', { wide: true, subs: 1 });
+  const a = mkChart(p.main, true), b = mkChart(p.sub[0], true);
+  const ps = add(a, 'Line', line(oc.t, oc.price), p => ({ color: p.ink, lineWidth: 1 }));
+  const setM = () => ps.setMarkers([
+    ...oc.hrBuys.map(time => ({ time, position: 'belowBar', color: P.s3, shape: 'arrowUp', text: 'Buy' })),
+    ...D.halvings.map(time => ({ time, position: 'aboveBar', color: P.muted, shape: 'arrowDown', text: '반감기' })),
+  ].sort((x, y) => x.time - y.time));
+  setM(); recolorers.push(setM);
+  add(b, 'Line', line(oc.t, oc.hr30), p => ({ color: p.s1, lineWidth: 2 }));
+  add(b, 'Line', line(oc.t, oc.hr60), p => ({ color: p.s2, lineWidth: 2 }));
+  syncCharts([a, b]);
+  a.timeScale().fitContent();
+  readout(p.ro, [a, b], [{ label: '가격', role: 'ink', t: oc.t, v: oc.price, fmt: fmtUsd },
+    { label: 'HR 30D', role: 's1', t: oc.t, v: oc.hr30, fmt: v => fmtN(v, 0) + ' EH/s' }, { label: 'HR 60D', role: 's2', t: oc.t, v: oc.hr60, fmt: v => fmtN(v, 0) + ' EH/s' }]);
+}
+{ // 공포·탐욕
+  const p = panel('공포·탐욕 지수', '출처 <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">alternative.me</a> · 25 이하 극단적 공포 / 75 이상 극단적 탐욕 · 최근 1년 (스크롤로 2018~)', { wide: true });
+  const a = mkChart(p.main, false);
+  const s = add(a, 'Line', line(D.fng.t, D.fng.v), p => ({ color: p.s4, lineWidth: 1 }));
+  refLines(s, [[25, '25'], [75, '75']]);
+  a.timeScale().setVisibleLogicalRange({ from: D.fng.t.length - 365, to: D.fng.t.length + 2 });
+  readout(p.ro, [a], [{ label: '지수', role: 's4', t: D.fng.t, v: D.fng.v, fmt: v => String(v) }]);
+}
+{ // 사이클
+  const p = panel('BTC 사이클 이력 (고점·저점)', '고점 = 신고가 전 60% 이상 하락이 확인된 ATH(반감기 구간당 1개), 저점 = 고점 사이 최저가 · 미확인 ATH는 잠정', { wide: true });
+  const a = mkChart(p.main, true);
+  const s = add(a, 'Line', line(oc.t, oc.price), p => ({ color: p.ink, lineWidth: 1 }));
+  const setM = () => s.setMarkers(D.cycles.flatMap(c => [
+    ...(c.dataStart ? [] : [{ time: c.bottom, position: 'belowBar', color: P.s1, shape: 'circle', text: '저점' }]),
+    { time: c.top, position: 'aboveBar', color: P.s8, shape: 'circle', text: c.open ? '고점(잠정)' : '고점' },
+  ]).sort((x, y) => x.time - y.time));
+  setM(); recolorers.push(setM);
+  a.timeScale().fitContent();
+  readout(p.ro, [a], [{ label: '가격', role: 'ink', t: oc.t, v: oc.price, fmt: fmtUsd }]);
+  const rows = D.cycles.map(c => `<tr><td>${c.dataStart ? '데이터 시작' : fmtDate(c.bottom)}</td><td>${fmtUsd(c.bottomP)}</td>
+    <td>${fmtDate(c.top)}${c.open ? ' (잠정)' : ''}</td><td>${fmtUsd(c.topP)}</td><td>${c.dataStart ? '–' : c.bullDays.toLocaleString()}</td>
+    <td>${c.dataStart ? '–' : (c.topP / c.bottomP).toFixed(1) + '×'}</td><td>${fmtDate(c.nextBottom)}${c.open ? ' (현재까지)' : ''}</td>
+    <td>${c.bearDays.toLocaleString()}</td><td>${fmtPct(c.drawdown, 0)}</td></tr>`).join('');
+  const wrap = document.createElement('div');
+  wrap.className = 'tablewrap';
+  wrap.innerHTML = `<table><thead><tr><th>저점</th><th>저점가</th><th>고점</th><th>고점가</th><th>상승 일수</th><th>배수</th>
+    <th>다음 저점</th><th>하락 일수</th><th>낙폭</th></tr></thead><tbody>${rows}</tbody></table>`;
+  p.el.appendChild(wrap);
+}
+</script>
+</body>
+</html>
