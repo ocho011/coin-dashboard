@@ -38,7 +38,8 @@ button, input, select { background: var(--surface); color: var(--ink2); border: 
   border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 13px; }
 button { cursor: pointer; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 12px; }
-.controls input { width: 130px; text-transform: uppercase; }
+.thr { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 12px; }
+.thr input { padding: 0; width: 110px; accent-color: var(--ink); }
 .seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
@@ -70,11 +71,10 @@ footer a { color: inherit; }
   </header>
 
   <div class="controls">
-    <input id="sym" list="syms" value="BTCUSDT" aria-label="심볼" spellcheck="false">
-    <datalist id="syms"><option>BTCUSDT</option><option>ETHUSDT</option><option>ZECUSDT</option>
-      <option>SOLUSDT</option><option>XRPUSDT</option><option>DOGEUSDT</option><option>BNBUSDT</option></datalist>
+    <select id="sym" aria-label="심볼"></select>
     <div class="seg" id="ranges" role="group" aria-label="기간"></div>
-    <button id="go" type="button">불러오기</button>
+    <button id="go" type="button">새로고침</button>
+    <label class="thr">임계값 <input id="thr" type="range" min="0" max="0.9" step="0.05" value="0.3"> <span id="thrv">0.30</span></label>
   </div>
 
   <section class="panel">
@@ -96,7 +96,7 @@ footer a { color: inherit; }
         OI가 줄면 전체를 같은 비율로 줄이고, 가격이 지나간 구간은 청산된 것으로 보고 지운다.</li>
       <li>레버리지 분포는 검증할 수 없는 가정이며 결과를 가장 크게 좌우한다. Binance 한 곳의 OI만 반영한다.</li>
       <li>OI 이력은 최근 30일만 제공되므로 기간은 최대 30일. 선택한 기간 앞의 최대 7일을 장부 누적(워밍업)에 쓴다.
-        색상 상한은 99번째 백분위, 그 15% 미만은 숨긴다.</li>
+        색상 상한은 99.5번째 백분위, 임계값(상한 대비 비율) 미만은 숨긴다.</li>
       <li>매매 신호로서의 검증: 2025-01~2026-08 BTC·ETH·ZEC에서 1시간 스윙 고저점의 스윕 확률을 클러스터 강도별로
         비교했으나 차이가 없었다(BTC p=0.37, <a href="https://github.com/ocho011/coin-dashboard/blob/main/research/liq-heatmap/PREREG.md" target="_blank" rel="noopener">사전등록과 결과</a>). 참고용 시각화이며 투자 조언이 아니다.</li>
       <li>데이터: Binance USDT-M 선물 공개 API(openInterestHist, klines)를 브라우저가 직접 조회. 일부 지역에서는 Binance 접속이 차단된다.
@@ -106,8 +106,11 @@ footer a { color: inherit; }
 </main>
 <script>
 const LEV = [[10, 0.10], [25, 0.25], [50, 0.30], [100, 0.35]];
-const MMR = 0.004, BIN = 0.001, CUT = 0.15, M5 = 300000, DAY = 86400000;
-const RANGES = { '12h': 0.5, '1d': 1, '3d': 3, '7d': 7, '30d': 29 };  // 30d = OI 30일 제한 경계 여유 1일
+const MMR = 0.004, BIN = 0.001, M5 = 300000, DAY = 86400000;
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'SOLUSDT', 'ZECUSDT', 'TAOUSDT'];
+const RANGES = { '12h': 0.5, '24h': 1, '48h': 2, '3d': 3, '1w': 7, '2w': 14, '1M': 29 };  // 1M = OI 30일 제한 경계 여유 1일
+// 낮은 값은 어둡게 눌러 두고 상위만 밝게 — 선형 Viridis는 중간값이 넓게 번져 흐릿해 보인다
+const SCALE = [[0, '#2a0a3d'], [0.45, '#3b2f80'], [0.7, '#21908d'], [0.88, '#5ec962'], [1, '#fde725']];
 const API = 'https://fapi.binance.com';
 
 class Book {
@@ -173,7 +176,7 @@ async function fetchData(sym, start, end, onProgress) {
 function simulate({ oi, kl }, viewStart) {
   const book = new Book(+kl[0][4]);
   const view = kl.filter(k => k[0] >= viewStart);
-  const every = Math.max(1, Math.ceil(view.length / 360));  // 열 수 ≤ 약 360
+  const every = Math.max(1, Math.ceil(view.length / 720));  // 열 수 ≤ 약 720
   const snaps = [], candles = [];
   let cur = null, n = 0;
   for (const k of kl) {
@@ -203,17 +206,18 @@ function render(r, days) {
   const ys = [], z = [];
   for (let j = y0; j < y1; j++) { ys.push(book.price(j)); z.push(snaps.map(s => s[1][j] / 1e6)); }
   const flat = z.flat().filter(v => v > 0).sort((a, b) => a - b);
-  const zmax = flat.length ? flat[Math.floor(flat.length * 0.99)] : 1;
-  const zz = z.map(row => row.map(v => v >= zmax * CUT ? v : null));
+  const zmax = flat.length ? flat[Math.floor(flat.length * 0.995)] : 1;
+  const cut = zmax * +document.getElementById('thr').value;
+  const zz = z.map(row => row.map(v => v > 0 && v >= cut ? Math.min(v, zmax) : null));
   const ink = css('--ink2');
   Plotly.react('chart', [
-    { type: 'heatmap', x: snaps.map(s => s[0]), y: ys, z: zz, zmin: 0, zmax, colorscale: 'Viridis',
+    { type: 'heatmap', x: snaps.map(s => s[0]), y: ys, z: zz, zmin: 0, zmax, colorscale: SCALE, zsmooth: false,
       colorbar: { title: { text: '$M' }, thickness: 12, x: -0.015, xanchor: 'right' }, hovertemplate: '%{x|%m-%d %H:%M}<br>%{y:,.5r}<br>$%{z:.1f}M<extra></extra>' },
     { type: 'candlestick', x: candles.map(c => c[0]), open: candles.map(c => c[1]), high: candles.map(c => c[2]),
       low: candles.map(c => c[3]), close: candles.map(c => c[4]), showlegend: false,
       increasing: { line: { color: '#f0efec' } }, decreasing: { line: { color: '#f43f5e' } } },
   ], {
-    paper_bgcolor: css('--surface'), plot_bgcolor: '#440154', font: { color: ink, size: 12 },
+    paper_bgcolor: css('--surface'), plot_bgcolor: '#2a0a3d', font: { color: ink, size: 12 },
     margin: { l: 64, r: 64, t: 10, b: 36 },
     xaxis: { rangeslider: { visible: false }, showgrid: false },
     yaxis: { side: 'right', showgrid: false, tickformat: ',.5r' },
@@ -231,9 +235,9 @@ function render(r, days) {
 }
 
 const status = document.getElementById('status');
-let range = '30d';
+let range = '1M';
 async function load() {
-  const sym = document.getElementById('sym').value.trim().toUpperCase();
+  const sym = document.getElementById('sym').value;
   const days = RANGES[range];
   const end = Math.floor(Date.now() / M5) * M5;
   const viewStart = end - days * DAY;
@@ -251,7 +255,7 @@ async function load() {
     status.textContent = `${sym} · 기간 ${range} · 현재가 ${fmt(lastResult.last)} · 기준 ${asof}`;
   } catch (e) {
     status.className = 'err';
-    status.textContent = `불러오기 실패: ${e.message}. 심볼 이름을 확인하거나, Binance 접속이 차단된 지역인지 확인하세요.`;
+    status.textContent = `불러오기 실패: ${e.message}. Binance 접속이 차단된 지역인지 확인하세요.`;
   }
 }
 
@@ -265,11 +269,18 @@ for (const k of Object.keys(RANGES)) {
 function syncSeg() { for (const b of seg.children) b.setAttribute('aria-pressed', b.dataset.r === range); }
 
 const q = new URLSearchParams(location.search);
-if (q.get('symbol')) document.getElementById('sym').value = q.get('symbol').toUpperCase();
+const symSel = document.getElementById('sym');
+for (const s of SYMBOLS) symSel.add(new Option(s.replace('USDT', ''), s));
+if (SYMBOLS.includes((q.get('symbol') || '').toUpperCase())) symSel.value = q.get('symbol').toUpperCase();
 if (RANGES[q.get('range')]) range = q.get('range');
 syncSeg();
 document.getElementById('go').onclick = load;
-document.getElementById('sym').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+symSel.onchange = load;
+const thr = document.getElementById('thr');
+thr.oninput = () => {
+  document.getElementById('thrv').textContent = (+thr.value).toFixed(2);
+  if (lastResult) render(lastResult, RANGES[range]);
+};
 
 function currentMode() {
   const forced = document.documentElement.dataset.theme;
