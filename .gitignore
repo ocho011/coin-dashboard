@@ -2,3 +2,8 @@ cache/
 dashboard.html
 _site/
 __pycache__/
+
+# research/liq-heatmap: 재현 가능한 다운로드·생성물
+research/liq-heatmap/data/
+research/liq-heatmap/cache_*.json
+research/liq-heatmap/*_liq_heatmap.html
