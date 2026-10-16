@@ -215,7 +215,7 @@ function render(r, days) {
       colorbar: { title: { text: '$M' }, thickness: 12, x: -0.015, xanchor: 'right' }, hovertemplate: '%{x|%m-%d %H:%M}<br>%{y:,.5r}<br>$%{z:.1f}M<extra></extra>' },
     { type: 'candlestick', x: candles.map(c => c[0]), open: candles.map(c => c[1]), high: candles.map(c => c[2]),
       low: candles.map(c => c[3]), close: candles.map(c => c[4]), showlegend: false,
-      increasing: { line: { color: '#f0efec' } }, decreasing: { line: { color: '#f43f5e' } } },
+      increasing: { line: { color: '#0ecb81' }, fillcolor: '#0ecb81' }, decreasing: { line: { color: '#f6465d' }, fillcolor: '#f6465d' } },
   ], {
     paper_bgcolor: css('--surface'), plot_bgcolor: '#2a0a3d', font: { color: ink, size: 12 },
     margin: { l: 64, r: 64, t: 10, b: 36 },
