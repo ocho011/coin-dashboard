@@ -1,4 +1,4 @@
-# btc-cycle-dashboard
+# coin-dashboard
 
 무료 공개 데이터로 만든 코인 대시보드. GitHub Actions가 매일 다시 빌드해 GitHub Pages에 배포한다.
 
