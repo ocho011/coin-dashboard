@@ -27,6 +27,10 @@
 body { margin: 0; background: var(--page); color: var(--ink);
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+nav.top { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; margin-bottom: 14px; }
+nav.top .brand { font-weight: 600; margin-right: 6px; }
+nav.top a { color: var(--ink2); text-decoration: none; padding: 2px 0; border-bottom: 2px solid transparent; }
+nav.top a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
 header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 h1 { font-size: 20px; margin: 0; }
 .sub { color: var(--muted); font-size: 12px; }
@@ -71,6 +75,7 @@ footer li { margin: 2px 0; }
 </head>
 <body>
 <main>
+  <nav class="top"><span class="brand">코인 대시보드</span><a href="./" aria-current="page">BTC 사이클</a><a href="heatmap/">청산 히트맵</a></nav>
   <header>
     <div>
       <h1>BTC 사이클 대시보드</h1>

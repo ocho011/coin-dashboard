@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>추정 청산 히트맵</title>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+nav.top { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; margin-bottom: 14px; }
+nav.top .brand { font-weight: 600; margin-right: 6px; }
+nav.top a { color: var(--ink2); text-decoration: none; padding: 2px 0; border-bottom: 2px solid transparent; }
+nav.top a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+.sub { color: var(--muted); font-size: 12px; }
+button, input, select { background: var(--surface); color: var(--ink2); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 13px; }
+button { cursor: pointer; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 12px; }
+.controls input { width: 130px; text-transform: uppercase; }
+.seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px; }
+#chart { width: 100%; height: 68vh; min-height: 360px; }
+#status { color: var(--ink2); font-size: 12px; min-height: 18px; }
+#status.err { color: #c93636; }
+.levels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink2); font-weight: 500; }
+h2 { font-size: 14px; margin: 0 0 4px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+footer li { margin: 2px 0; }
+footer a { color: inherit; }
+@media (max-width: 760px) { .levels { grid-template-columns: minmax(0, 1fr); } #chart { height: 60vh; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top"><span class="brand">코인 대시보드</span><a href="../">BTC 사이클</a><a href="./" aria-current="page">청산 히트맵</a></nav>
+  <header>
+    <div>
+      <h1>추정 청산 히트맵</h1>
+      <div class="sub">Binance USDT-M 미결제약정으로 추정한 청산 대기 가격대 · 브라우저가 직접 조회</div>
+    </div>
+    <button id="themeBtn" type="button">테마 전환</button>
+  </header>
+
+  <div class="controls">
+    <input id="sym" list="syms" value="BTCUSDT" aria-label="심볼" spellcheck="false">
+    <datalist id="syms"><option>BTCUSDT</option><option>ETHUSDT</option><option>ZECUSDT</option>
+      <option>SOLUSDT</option><option>XRPUSDT</option><option>DOGEUSDT</option><option>BNBUSDT</option></datalist>
+    <div class="seg" id="ranges" role="group" aria-label="기간"></div>
+    <button id="go" type="button">불러오기</button>
+  </div>
+
+  <section class="panel">
+    <div id="status"></div>
+    <div id="chart"></div>
+  </section>
+
+  <section class="levels">
+    <div class="panel"><h2>현재가 위 — 숏 청산 상위</h2><table id="up"></table></div>
+    <div class="panel"><h2>현재가 아래 — 롱 청산 상위</h2><table id="down"></table></div>
+  </section>
+
+  <footer>
+    <strong>모델과 한계</strong>
+    <ul>
+      <li>거래소는 청산 대기 가격을 공개하지 않는다. 여기 보이는 것은 실제 데이터가 아니라 추정치다.</li>
+      <li>5분마다 미결제약정(OI) 증가분 = 신규 포지션. 테이커 매수 비중으로 롱/숏을 나누고, 가정한 레버리지 분포
+        (10x 10% · 25x 25% · 50x 30% · 100x 35%, 유지증거금 0.4%)로 청산가를 계산해 0.1% 가격 구간에 누적한다.
+        OI가 줄면 전체를 같은 비율로 줄이고, 가격이 지나간 구간은 청산된 것으로 보고 지운다.</li>
+      <li>레버리지 분포는 검증할 수 없는 가정이며 결과를 가장 크게 좌우한다. Binance 한 곳의 OI만 반영한다.</li>
+      <li>OI 이력은 최근 30일만 제공되므로 기간은 최대 30일. 선택한 기간 앞의 최대 7일을 장부 누적(워밍업)에 쓴다.
+        색상 상한은 99번째 백분위, 그 15% 미만은 숨긴다.</li>
+      <li>매매 신호로서의 검증: 2025-01~2026-08 BTC·ETH·ZEC에서 1시간 스윙 고저점의 스윕 확률을 클러스터 강도별로
+        비교했으나 차이가 없었다(BTC p=0.37). 참고용 시각화이며 투자 조언이 아니다.</li>
+      <li>데이터: Binance USDT-M 선물 공개 API(openInterestHist, klines)를 브라우저가 직접 조회. 일부 지역에서는 Binance 접속이 차단된다.
+        차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
+    </ul>
+  </footer>
+</main>
+<script>
+const LEV = [[10, 0.10], [25, 0.25], [50, 0.30], [100, 0.35]];
+const MMR = 0.004, BIN = 0.001, CUT = 0.15, M5 = 300000, DAY = 86400000;
+const RANGES = { '12h': 0.5, '1d': 1, '3d': 3, '7d': 7, '30d': 29 };  // 30d = OI 30일 제한 경계 여유 1일
+const API = 'https://fapi.binance.com';
+
+class Book {
+  constructor(ref) {
+    this.lo = ref * 0.2; this.step = Math.log1p(BIN);
+    this.n = Math.floor(Math.log(25) / this.step) + 1;
+    this.L = new Float64Array(this.n); this.S = new Float64Array(this.n);
+    this.scale = 1; this.lt = -1; this.sb = this.n;
+  }
+  idx(p) { return Math.min(Math.max(Math.floor(Math.log(p / this.lo) / this.step), 0), this.n - 1); }
+  price(j) { return this.lo * Math.exp((j + 0.5) * this.step); }
+  feed(h, l, c, vol, buy, o0, o1) {
+    const il = this.idx(l);
+    for (let j = il; j <= this.lt; j++) this.L[j] = 0;
+    this.lt = Math.min(this.lt, il - 1);
+    const ih = this.idx(h);
+    for (let j = this.sb; j <= ih; j++) this.S[j] = 0;
+    this.sb = Math.max(this.sb, ih + 1);
+    if (o0 == null || o1 == null) return;
+    if (o1 > o0) {
+      const px = (h + l + c) / 3, bf = vol ? buy / vol : 0.5, notional = (o1 - o0) * px / this.scale;
+      for (const [lev, w] of LEV) {
+        const jl = this.idx(px * (1 - 1 / lev + MMR)), js = this.idx(px * (1 + 1 / lev - MMR));
+        this.L[jl] += notional * bf * w; this.S[js] += notional * (1 - bf) * w;
+        this.lt = Math.max(this.lt, jl); this.sb = Math.min(this.sb, js);
+      }
+    } else if (o1 < o0 && o0 > 0) {
+      this.scale *= o1 / o0;
+      if (this.scale < 1e-100) {
+        for (let j = 0; j < this.n; j++) { this.L[j] *= this.scale; this.S[j] *= this.scale; }
+        this.scale = 1;
+      }
+    }
+  }
+  level(j) { return (this.L[j] + this.S[j]) * this.scale; }
+}
+
+async function getJson(path, params) {
+  const r = await fetch(`${API}${path}?${new URLSearchParams(params)}`);
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body && body.msg ? body.msg : `HTTP ${r.status}`);
+  return body;
+}
+
+async function fetchData(sym, start, end, onProgress) {
+  const oi = new Map();
+  for (let t = start; t < end; t += 500 * M5) {
+    const rows = await getJson('/futures/data/openInterestHist',
+      { symbol: sym, period: '5m', limit: 500, startTime: t, endTime: Math.min(t + 500 * M5, end) });
+    for (const r of rows) oi.set(+r.timestamp, +r.sumOpenInterest);
+    onProgress();
+  }
+  const kl = [];
+  for (let t = start; t < end;) {
+    const rows = await getJson('/fapi/v1/klines', { symbol: sym, interval: '5m', limit: 1500, startTime: t, endTime: end });
+    if (!rows.length) break;
+    kl.push(...rows); t = rows[rows.length - 1][0] + M5;
+    onProgress();
+  }
+  return { oi, kl };
+}
+
+function simulate({ oi, kl }, viewStart) {
+  const book = new Book(+kl[0][4]);
+  const view = kl.filter(k => k[0] >= viewStart);
+  const every = Math.max(1, Math.ceil(view.length / 360));  // 열 수 ≤ 약 360
+  const snaps = [], candles = [];
+  let cur = null, n = 0;
+  for (const k of kl) {
+    const t = k[0], o = +k[1], h = +k[2], l = +k[3], c = +k[4];
+    book.feed(h, l, c, +k[5], +k[9], oi.get(t), oi.get(t + M5));
+    if (t < viewStart) continue;
+    if (!cur) cur = [t, o, h, l, c]; else { cur[2] = Math.max(cur[2], h); cur[3] = Math.min(cur[3], l); cur[4] = c; }
+    if (++n % every === 0) {
+      const ts = new Date(t + M5);
+      snaps.push([ts, Array.from({ length: book.n }, (_, j) => book.level(j))]);
+      candles.push([new Date(cur[0]), cur[1], cur[2], cur[3], cur[4]]); cur = null;
+    }
+  }
+  return { book, snaps, candles, last: +kl[kl.length - 1][4] };
+}
+
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+const fmt = p => p >= 1000 ? p.toLocaleString('en-US', { maximumFractionDigits: 0 }) : p.toPrecision(5);
+const usd = v => v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : `$${(v / 1e6).toFixed(1)}M`;
+
+let lastResult = null;
+function render(r, days) {
+  const { book, snaps, candles } = r;
+  const pad = days <= 1 ? 0.04 : 0.08;
+  const y0 = book.idx(Math.min(...candles.map(c => c[3])) * (1 - pad));
+  const y1 = book.idx(Math.max(...candles.map(c => c[2])) * (1 + pad));
+  const ys = [], z = [];
+  for (let j = y0; j < y1; j++) { ys.push(book.price(j)); z.push(snaps.map(s => s[1][j] / 1e6)); }
+  const flat = z.flat().filter(v => v > 0).sort((a, b) => a - b);
+  const zmax = flat.length ? flat[Math.floor(flat.length * 0.99)] : 1;
+  const zz = z.map(row => row.map(v => v >= zmax * CUT ? v : null));
+  const ink = css('--ink2');
+  Plotly.react('chart', [
+    { type: 'heatmap', x: snaps.map(s => s[0]), y: ys, z: zz, zmin: 0, zmax, colorscale: 'Viridis',
+      colorbar: { title: { text: '$M' }, thickness: 12, x: -0.015, xanchor: 'right' }, hovertemplate: '%{x|%m-%d %H:%M}<br>%{y:,.5r}<br>$%{z:.1f}M<extra></extra>' },
+    { type: 'candlestick', x: candles.map(c => c[0]), open: candles.map(c => c[1]), high: candles.map(c => c[2]),
+      low: candles.map(c => c[3]), close: candles.map(c => c[4]), showlegend: false,
+      increasing: { line: { color: '#f0efec' } }, decreasing: { line: { color: '#f43f5e' } } },
+  ], {
+    paper_bgcolor: css('--surface'), plot_bgcolor: '#440154', font: { color: ink, size: 12 },
+    margin: { l: 64, r: 64, t: 10, b: 36 },
+    xaxis: { rangeslider: { visible: false }, showgrid: false },
+    yaxis: { side: 'right', showgrid: false, tickformat: ',.5r' },
+  }, { responsive: true, displaylogo: false });
+
+  const rows = (side) => {
+    const arr = side === 'S' ? book.S : book.L, out = [];
+    for (let j = 0; j < book.n; j++) if (arr[j] > 0) out.push([book.price(j), arr[j] * book.scale]);
+    return out.sort((a, b) => b[1] - a[1]).slice(0, 6);
+  };
+  for (const [id, side] of [['up', 'S'], ['down', 'L']]) {
+    document.getElementById(id).innerHTML = '<tr><th>가격</th><th>현재가 대비</th><th>추정 물량</th></tr>' +
+      rows(side).map(([p, v]) => `<tr><td>${fmt(p)}</td><td>${((p / r.last - 1) * 100).toFixed(2)}%</td><td>${usd(v)}</td></tr>`).join('');
+  }
+}
+
+const status = document.getElementById('status');
+let range = '30d';
+async function load() {
+  const sym = document.getElementById('sym').value.trim().toUpperCase();
+  const days = RANGES[range];
+  const end = Math.floor(Date.now() / M5) * M5;
+  const viewStart = end - days * DAY;
+  const start = Math.max(viewStart - 7 * DAY, end - 29 * DAY);
+  const total = Math.ceil((end - start) / (500 * M5)) + Math.ceil((end - start) / (1500 * M5));
+  let done = 0;
+  status.className = ''; status.textContent = `${sym} 불러오는 중…`;
+  history.replaceState(null, '', `?symbol=${sym}&range=${range}`);
+  try {
+    const d = await fetchData(sym, start, end, () => { status.textContent = `${sym} 불러오는 중… ${Math.min(++done, total)}/${total}`; });
+    if (!d.kl.length) throw new Error('캔들 데이터 없음');
+    lastResult = simulate(d, viewStart);
+    render(lastResult, days);
+    const asof = new Date(end).toLocaleString('ko-KR', { hour12: false });
+    status.textContent = `${sym} · 기간 ${range} · 현재가 ${fmt(lastResult.last)} · 기준 ${asof}`;
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = `불러오기 실패: ${e.message}. 심볼 이름을 확인하거나, Binance 접속이 차단된 지역인지 확인하세요.`;
+  }
+}
+
+const seg = document.getElementById('ranges');
+for (const k of Object.keys(RANGES)) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = k; b.dataset.r = k;
+  b.onclick = () => { range = k; syncSeg(); load(); };
+  seg.appendChild(b);
+}
+function syncSeg() { for (const b of seg.children) b.setAttribute('aria-pressed', b.dataset.r === range); }
+
+const q = new URLSearchParams(location.search);
+if (q.get('symbol')) document.getElementById('sym').value = q.get('symbol').toUpperCase();
+if (RANGES[q.get('range')]) range = q.get('range');
+syncSeg();
+document.getElementById('go').onclick = load;
+document.getElementById('sym').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+
+function currentMode() {
+  const forced = document.documentElement.dataset.theme;
+  return forced || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+document.getElementById('themeBtn').onclick = () => {
+  document.documentElement.dataset.theme = currentMode() === 'dark' ? 'light' : 'dark';
+  if (lastResult) render(lastResult, RANGES[range]);
+};
+load();
+</script>
+</body>
+</html>
