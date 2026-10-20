@@ -49,7 +49,9 @@ select:disabled { opacity: 0.5; }
 #chart { width: 100%; height: 74vh; min-height: 440px; }
 #status { color: var(--ink2); font-size: 12px; min-height: 18px; }
 #status.err { color: #c93636; }
-#last { font-size: 13px; min-height: 20px; margin-top: 2px; }
+#last, #regimeStatus { font-size: 13px; min-height: 20px; margin-top: 2px; }
+#regime { width: 100%; height: 42vh; min-height: 300px; }
+h2 { font-size: 14px; margin: 0 0 4px; }
 .tag { display: inline-block; padding: 0 6px; border-radius: 6px; color: #fff; font-size: 12px; }
 footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
 footer li { margin: 2px 0; }
@@ -77,6 +79,10 @@ footer a { color: inherit; }
       <option value="window">조회 구간 처음부터</option>
       <option value="day">매일 UTC 00시 리셋</option>
     </select></label>
+    <label class="opt">단위 <select id="unit">
+      <option value="coin">코인 수량</option>
+      <option value="usd">USD</option>
+    </select></label>
     <label class="opt"><input id="exh" type="checkbox"> 소진형(3·4) 표시</label>
     <label class="opt"><input id="dlt" type="checkbox"> 봉별 델타</label>
     <button id="go" type="button">새로고침</button>
@@ -86,6 +92,12 @@ footer a { color: inherit; }
     <div id="status"></div>
     <div id="last"></div>
     <div id="chart"></div>
+  </section>
+
+  <section class="panel" style="margin-top:16px">
+    <h2>90일 테이커 CVD — 매수·매도 우위 국면</h2>
+    <div id="regimeStatus"></div>
+    <div id="regime"></div>
   </section>
 
   <footer>
@@ -98,6 +110,9 @@ footer a { color: inherit; }
         <b>흡수 숏(2)</b>: 가격 고점은 낮은데(LH) CVD 고점은 더 높다(HH) — 시장가 매수를 지정가 매도가 받아냈다.
         음영 박스는 가격이 깨지 못한 직전 스윙 레벨부터 이번 스윙까지의 구간이다.</li>
       <li><b>소진(3·4, 기본 숨김)</b>: 가격은 신고점(신저점)인데 CVD는 따라가지 못한 경우. 흔히 쓰이는 다이버전스지만 이 페이지는 흡수형만 기본 표시하고, 비교용으로 회색 표시를 켤 수 있다.</li>
+      <li><b>90일 테이커 CVD</b>: 일봉 델타의 최근 90일 이동 합계. 양수이면서 전날보다 늘면 매수 우위(초록), 음수이면서 전날보다 줄면 매도 우위(빨강), 그 밖은 중립(회색).
+        수개월 단위 국면을 보는 용도이며 스윙 다이버전스 판정과는 별개다. 마지막 막대는 진행 중인 날이다.</li>
+      <li>단위: 코인 수량은 테이커 매수 수량 기준, USD는 체결 대금(USDT) 기준. 다른 사이트의 CVD와 숫자가 다른 것은 누적 시작점·단위·합산 거래소가 다르기 때문이며, 비교할 것은 기울기와 고저점의 상대 위치다.</li>
     </ul>
     <strong>한계</strong>
     <ul>
@@ -131,11 +146,14 @@ async function getJson(path, params) {
   return body;
 }
 
+// 델타 = 2 × 테이커 매수 − 전체. coin: 수량(k[9], k[5]), usd: 대금(k[10], k[7])
+const delta = (k, unit) => unit === 'usd' ? 2 * +k[10] - +k[7] : 2 * +k[9] - +k[5];
+
 // 봉별 델타와 CVD. anchor === 'day'면 UTC 날짜가 바뀔 때 0부터 다시 누적
-function buildBars(rows, anchor) {
+function buildBars(rows, anchor, unit) {
   let cum = 0, day = null;
   return rows.map(k => {
-    const t = k[0], d = 2 * +k[9] - +k[5], dd = Math.floor(t / DAY);
+    const t = k[0], d = delta(k, unit), dd = Math.floor(t / DAY);
     if (anchor === 'day' && dd !== day) { cum = 0; day = dd; }
     const co = cum; cum += d;
     return { t, o: +k[1], h: +k[2], l: +k[3], c: +k[4], d, co, cc: cum, day: dd };
@@ -197,6 +215,22 @@ function findSignals(bars, piv, anchor) {
   return sigs.sort((a, b) => a.cur.i - b.cur.i);
 }
 
+// 일봉 델타의 90일 이동 합계와 국면
+const WIN = 90;
+function buildRegime(rows, unit) {
+  const d = rows.map(k => delta(k, unit)), out = [];
+  let s = 0;
+  for (let i = 0; i < rows.length; i++) {
+    s += d[i];
+    if (i >= WIN) s -= d[i - WIN];
+    if (i < WIN - 1) continue;
+    const prev = out.length ? out[out.length - 1].v : s;
+    const ph = s > 0 && s > prev ? 'buy' : s < 0 && s < prev ? 'sell' : 'neutral';
+    out.push({ t: rows[i][0], c: +rows[i][4], v: s, ph });
+  }
+  return out;
+}
+
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 const fmt = p => p >= 1000 ? p.toLocaleString('en-US', { maximumFractionDigits: 0 }) : p.toPrecision(5);
 const when = t => new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -254,10 +288,10 @@ function render() {
     margin: { l: 10, r: 70, t: 10, b: 36 }, hovermode: 'x unified', dragmode: 'pan',
     xaxis: { rangeslider: { visible: false }, gridcolor: grid, showspikes: true, spikemode: 'across', spikethickness: 1, spikecolor: ink },
     yaxis: { ...ax(dom.y), tickformat: ',.5r', title: { text: '가격', standoff: 4 } },
-    yaxis2: { ...ax(dom.y2), tickformat: '.3s', title: { text: 'CVD', standoff: 4 } },
+    yaxis2: { ...ax(dom.y2), exponentformat: 'B', title: { text: 'CVD', standoff: 4 } },
     shapes, annotations,
   };
-  if (showDelta) layout.yaxis3 = { ...ax(dom.y3), tickformat: '.2s', title: { text: '델타', standoff: 4 } };
+  if (showDelta) layout.yaxis3 = { ...ax(dom.y3), exponentformat: 'B', title: { text: '델타', standoff: 4 } };
   Plotly.react('chart', traces, layout, { responsive: true, displaylogo: false, scrollZoom: true });
 
   const shown = sigs.filter(s => showExh || s.type.startsWith('abs'));
@@ -268,9 +302,37 @@ function render() {
     : '표시할 신호 없음';
 }
 
+const PHASE = { buy: { label: '매수 우위', color: UP }, sell: { label: '매도 우위', color: DOWN }, neutral: { label: '중립', color: GRAY } };
+let daily = null, dailySym = null;
+function renderRegime() {
+  const box = document.getElementById('regimeStatus');
+  if (!daily) return;
+  if (daily.length < WIN) { box.textContent = `일봉이 ${daily.length}개뿐이라 90일 합계를 계산할 수 없음`; Plotly.purge('regime'); return; }
+  const unit = unitSel.value, reg = buildRegime(daily, unit);
+  const x = reg.map(p => new Date(p.t)), ink = css('--ink2'), grid = css('--grid');
+  Plotly.react('regime', [
+    { type: 'bar', name: '90일 CVD', x, y: reg.map(p => p.v), marker: { color: reg.map(p => PHASE[p.ph].color) },
+      text: reg.map(p => fmtS(p.v)), hovertemplate: '%{x|%Y-%m-%d}<br>90일 CVD %{text}<extra></extra>', textposition: 'none' },
+    { type: 'scatter', mode: 'lines', name: '가격', x, y: reg.map(p => p.c), yaxis: 'y2', line: { color: ink, width: 1.2 },
+      hovertemplate: '가격 %{y:,.5r}<extra></extra>' },
+  ], {
+    paper_bgcolor: css('--surface'), plot_bgcolor: css('--surface'), font: { color: ink, size: 12 },
+    margin: { l: 60, r: 70, t: 10, b: 36 }, showlegend: false, bargap: 0, hovermode: 'x unified',
+    xaxis: { gridcolor: grid },
+    yaxis: { gridcolor: grid, zerolinecolor: css('--axis'), exponentformat: 'B', title: { text: unit === 'usd' ? '90일 CVD (USD)' : '90일 CVD (코인)', standoff: 4 } },
+    yaxis2: { overlaying: 'y', side: 'right', type: 'log', showgrid: false, tickformat: ',.4r', title: { text: '가격', standoff: 4 } },
+  }, { responsive: true, displaylogo: false });
+  const p = reg[reg.length - 1];
+  box.innerHTML = `현재 국면: <span class="tag" style="background:${PHASE[p.ph].color}">${PHASE[p.ph].label}</span> ` +
+    `90일 CVD ${fmtS(p.v)}${unit === 'usd' ? ' USD' : ''} · 일봉 ${daily.length}개 중 최근 ${reg.length}일 표시`;
+}
+const fmtS = v => { const a = Math.abs(v), sg = v < 0 ? '−' : '+';
+  return sg + (a >= 1e9 ? (a / 1e9).toFixed(2) + 'B' : a >= 1e6 ? (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(1) + 'K' : a.toFixed(1)); };
+
 const status = document.getElementById('status');
 const symSel = document.getElementById('sym'), barsSel = document.getElementById('bars');
 const anchorSel = document.getElementById('anchor'), pivIn = document.getElementById('pivn');
+const unitSel = document.getElementById('unit');
 let tf = '1h', rows = null;
 
 function recompute() {
@@ -278,7 +340,7 @@ function recompute() {
   const N = Math.min(10, Math.max(1, Math.round(+pivIn.value) || 3));
   pivIn.value = N;
   const anchor = tf === '1d' ? 'window' : anchorSel.value;
-  const bars = buildBars(rows, anchor);
+  const bars = buildBars(rows, anchor, unitSel.value);
   const piv = findPivots(bars, N);
   last = { bars, piv, sigs: findSignals(bars, piv, anchor) };
   render();
@@ -290,9 +352,14 @@ async function load() {
   status.className = ''; status.textContent = `${sym} ${tf} 불러오는 중…`;
   history.replaceState(null, '', `?symbol=${sym}&tf=${tf}&bars=${n}`);
   try {
-    rows = await getJson('/fapi/v1/klines', { symbol: sym, interval: tf, limit: n });
+    const [r, d] = await Promise.all([
+      getJson('/fapi/v1/klines', { symbol: sym, interval: tf, limit: n }),
+      dailySym === sym ? daily : getJson('/fapi/v1/klines', { symbol: sym, interval: '1d', limit: 1500 }),
+    ]);
+    rows = r; daily = d; dailySym = sym;
     if (!rows.length) throw new Error('캔들 데이터 없음');
     recompute();
+    renderRegime();
     const asof = new Date().toLocaleString('ko-KR', { hour12: false });
     status.textContent = `${sym} · ${tf} · ${rows.length}봉 · 현재가 ${fmt(+rows[rows.length - 1][4])} · 조회 ${asof}`;
   } catch (e) {
@@ -323,6 +390,7 @@ symSel.onchange = load;
 barsSel.onchange = load;
 pivIn.onchange = recompute;
 anchorSel.onchange = recompute;
+unitSel.onchange = () => { recompute(); renderRegime(); };
 document.getElementById('exh').onchange = render;
 document.getElementById('dlt').onchange = render;
 
@@ -333,6 +401,7 @@ function currentMode() {
 document.getElementById('themeBtn').onclick = () => {
   document.documentElement.dataset.theme = currentMode() === 'dark' ? 'light' : 'dark';
   render();
+  renderRegime();
 };
 load();
 </script>
