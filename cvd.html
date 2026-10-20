@@ -51,6 +51,10 @@ select:disabled { opacity: 0.5; }
 #status.err { color: #c93636; }
 #last, #regimeStatus { font-size: 13px; min-height: 20px; margin-top: 2px; }
 #regime { width: 100%; height: 42vh; min-height: 300px; }
+#chart, #regime { position: relative; }
+.xh-line { position: absolute; height: 0; border-top: 1px dashed var(--ink2); pointer-events: none; z-index: 5; }
+.xh-tag { position: absolute; transform: translateY(-50%); padding: 1px 5px; border-radius: 4px; font-size: 11px;
+  background: var(--ink); color: var(--page); pointer-events: none; z-index: 6; white-space: nowrap; font-variant-numeric: tabular-nums; }
 h2 { font-size: 14px; margin: 0 0 4px; }
 .tag { display: inline-block; padding: 0 6px; border-radius: 6px; color: #fff; font-size: 12px; }
 footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
@@ -393,6 +397,41 @@ anchorSel.onchange = recompute;
 unitSel.onchange = () => { recompute(); renderRegime(); };
 document.getElementById('exh').onchange = render;
 document.getElementById('dlt').onchange = render;
+
+// 가로 십자선: 커서 높이의 값을 해당 패널 축 옆에 표시. fmts = { 축 이름: 포맷 함수 }
+function crosshair(id, fmts) {
+  const gd = document.getElementById(id);
+  const line = document.createElement('div'), tags = {};
+  line.className = 'xh-line';
+  const hide = () => { line.style.display = 'none'; for (const t of Object.values(tags)) t.style.display = 'none'; };
+  gd.addEventListener('mousemove', e => {
+    const fl = gd._fullLayout;
+    if (!fl) return;
+    if (!line.isConnected) gd.appendChild(line);
+    const r = gd.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, s = fl._size;
+    if (px < s.l || px > s.l + s.w) return hide();
+    let hit = false;
+    for (const [name, f] of Object.entries(fmts)) {
+      const ya = fl[name];
+      if (!tags[name]) { tags[name] = document.createElement('div'); tags[name].className = 'xh-tag'; }
+      const tag = tags[name];
+      if (!tag.isConnected) gd.appendChild(tag);
+      if (!ya || py < ya._offset || py > ya._offset + ya._length) { tag.style.display = 'none'; continue; }
+      let v = ya.p2l(py - ya._offset);
+      if (ya.type === 'log') v = Math.pow(10, v);
+      tag.textContent = f(v);
+      tag.style.display = 'block'; tag.style.top = `${py}px`;
+      if (ya.side === 'left') { tag.style.left = ''; tag.style.right = `${r.width - s.l + 2}px`; }
+      else { tag.style.right = ''; tag.style.left = `${s.l + s.w + 2}px`; }
+      hit = true;
+    }
+    if (!hit) return hide();
+    Object.assign(line.style, { display: 'block', top: `${py}px`, left: `${s.l}px`, width: `${s.w}px` });
+  });
+  gd.addEventListener('mouseleave', hide);
+}
+crosshair('chart', { yaxis: fmt, yaxis2: fmtS, yaxis3: fmtS });
+crosshair('regime', { yaxis: fmtS, yaxis2: fmt });
 
 function currentMode() {
   const forced = document.documentElement.dataset.theme;
