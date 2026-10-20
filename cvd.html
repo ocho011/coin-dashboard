@@ -89,6 +89,7 @@ footer a { color: inherit; }
     </select></label>
     <label class="opt"><input id="exh" type="checkbox"> 소진형(3·4) 표시</label>
     <label class="opt"><input id="dlt" type="checkbox"> 봉별 델타</label>
+    <label class="opt" title="가로선을 커서 아래 봉의 시가·고가·저가·종가 중 가장 가까운 값에 붙인다"><input id="snap" type="checkbox"> 자석</label>
     <button id="go" type="button">새로고침</button>
   </div>
 
@@ -399,7 +400,19 @@ document.getElementById('exh').onchange = render;
 document.getElementById('dlt').onchange = render;
 
 // 가로 십자선: 커서 높이의 값을 해당 패널 축 옆에 표시. fmts = { 축 이름: 포맷 함수 }
-function crosshair(id, fmts) {
+// 자석: 커서 x에 가장 가까운 봉을 찾아 그 봉의 값 중 커서 높이에 가장 가까운 것을 돌려준다
+function snapMain(gd, name, px, v) {
+  if (!document.getElementById('snap').checked || !last) return null;
+  const xa = gd._fullLayout.xaxis, bars = last.bars, xt = xa.p2l(px - xa._offset);
+  let lo = 0, hi = bars.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xa.d2l(new Date(bars[mid].t)) <= xt) lo = mid; else hi = mid; }
+  const near = Math.abs(xa.d2l(new Date(bars[lo].t)) - xt) <= Math.abs(xa.d2l(new Date(bars[hi].t)) - xt) ? lo : hi;
+  const b = bars[near];
+  const cands = name === 'yaxis' ? [b.o, b.h, b.l, b.c] : name === 'yaxis2' ? [b.co, b.cc] : [b.d, 0];
+  return cands.reduce((a, c) => Math.abs(c - v) < Math.abs(a - v) ? c : a);
+}
+
+function crosshair(id, fmts, snap) {
   const gd = document.getElementById(id);
   const line = document.createElement('div'), tags = {};
   line.className = 'xh-line';
@@ -408,17 +421,29 @@ function crosshair(id, fmts) {
     const fl = gd._fullLayout;
     if (!fl) return;
     if (!line.isConnected) gd.appendChild(line);
-    const r = gd.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, s = fl._size;
+    const r = gd.getBoundingClientRect(), px = e.clientX - r.left, s = fl._size;
+    let py = e.clientY - r.top;
     if (px < s.l || px > s.l + s.w) return hide();
+    let snapped = null;  // [축 이름, 값] — 라벨에 픽셀 역산이 아닌 실제 값을 쓰기 위해
+    if (snap) {
+      for (const name of Object.keys(fmts)) {
+        const ya = fl[name];
+        if (!ya || py < ya._offset || py > ya._offset + ya._length) continue;
+        const sv = snap(gd, name, px, ya.p2l(py - ya._offset));
+        if (sv != null) { py = ya._offset + ya.l2p(sv); snapped = [name, sv]; }
+        break;
+      }
+    }
     let hit = false;
     for (const [name, f] of Object.entries(fmts)) {
       const ya = fl[name];
       if (!tags[name]) { tags[name] = document.createElement('div'); tags[name].className = 'xh-tag'; }
       const tag = tags[name];
       if (!tag.isConnected) gd.appendChild(tag);
-      if (!ya || py < ya._offset || py > ya._offset + ya._length) { tag.style.display = 'none'; continue; }
+      if (!ya || py < ya._offset - 0.5 || py > ya._offset + ya._length + 0.5) { tag.style.display = 'none'; continue; }
       let v = ya.p2l(py - ya._offset);
       if (ya.type === 'log') v = Math.pow(10, v);
+      if (snapped && snapped[0] === name) v = snapped[1];
       tag.textContent = f(v);
       tag.style.display = 'block'; tag.style.top = `${py}px`;
       if (ya.side === 'left') { tag.style.left = ''; tag.style.right = `${r.width - s.l + 2}px`; }
@@ -430,7 +455,7 @@ function crosshair(id, fmts) {
   });
   gd.addEventListener('mouseleave', hide);
 }
-crosshair('chart', { yaxis: fmt, yaxis2: fmtS, yaxis3: fmtS });
+crosshair('chart', { yaxis: fmt, yaxis2: fmtS, yaxis3: fmtS }, snapMain);
 crosshair('regime', { yaxis: fmtS, yaxis2: fmt });
 
 function currentMode() {
