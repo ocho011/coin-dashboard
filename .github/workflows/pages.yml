@@ -26,6 +26,7 @@ jobs:
           python-version: "3.12"
       - run: python build.py _site/index.html
       - run: mkdir -p _site/heatmap && cp heatmap.html _site/heatmap/index.html
+      - run: mkdir -p _site/cvd && cp cvd.html _site/cvd/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

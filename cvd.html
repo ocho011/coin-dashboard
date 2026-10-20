@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CVD 다이버전스</title>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+nav.top { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; margin-bottom: 14px; }
+nav.top .brand { font-weight: 600; margin-right: 6px; }
+nav.top a { color: var(--ink2); text-decoration: none; padding: 2px 0; border-bottom: 2px solid transparent; }
+nav.top a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+.sub { color: var(--muted); font-size: 12px; }
+button, input, select { background: var(--surface); color: var(--ink2); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 13px; }
+button { cursor: pointer; }
+select:disabled { opacity: 0.5; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 12px; }
+.opt { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 12px; }
+.opt input[type="number"] { width: 56px; padding: 3px 6px; }
+.opt input[type="checkbox"] { accent-color: var(--ink); }
+.seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px; }
+#chart { width: 100%; height: 74vh; min-height: 440px; }
+#status { color: var(--ink2); font-size: 12px; min-height: 18px; }
+#status.err { color: #c93636; }
+#last { font-size: 13px; min-height: 20px; margin-top: 2px; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 6px; color: #fff; font-size: 12px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+footer li { margin: 2px 0; }
+footer a { color: inherit; }
+@media (max-width: 760px) { #chart { height: 70vh; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top"><span class="brand">코인 대시보드</span><a href="../">BTC 사이클</a><a href="../heatmap/">청산 히트맵</a><a href="./" aria-current="page">CVD 다이버전스</a></nav>
+  <header>
+    <div>
+      <h1>CVD 다이버전스</h1>
+      <div class="sub">Binance USDT-M 무기한 선물 · 누적 거래량 델타(CVD)와 가격의 스윙 비교 · 브라우저가 직접 조회</div>
+    </div>
+    <button id="themeBtn" type="button">테마 전환</button>
+  </header>
+
+  <div class="controls">
+    <select id="sym" aria-label="심볼"></select>
+    <div class="seg" id="tfs" role="group" aria-label="타임프레임"></div>
+    <label class="opt">봉 수 <select id="bars"></select></label>
+    <label class="opt">피벗 N <input id="pivn" type="number" min="1" max="10" value="3"></label>
+    <label class="opt">CVD 시작점 <select id="anchor">
+      <option value="window">조회 구간 처음부터</option>
+      <option value="day">매일 UTC 00시 리셋</option>
+    </select></label>
+    <label class="opt"><input id="exh" type="checkbox"> 소진형(3·4) 표시</label>
+    <label class="opt"><input id="dlt" type="checkbox"> 봉별 델타</label>
+    <button id="go" type="button">새로고침</button>
+  </div>
+
+  <section class="panel">
+    <div id="status"></div>
+    <div id="last"></div>
+    <div id="chart"></div>
+  </section>
+
+  <footer>
+    <strong>정의와 판정 규칙</strong>
+    <ul>
+      <li>델타 = 시장가 매수 체결량 − 시장가 매도 체결량 = 2 × (테이커 매수량) − (총 거래량). CVD는 델타를 봉마다 더한 값이다.
+        아래 패널의 CVD 캔들은 시가 = 직전 누적값, 종가 = 현재 누적값이다.</li>
+      <li>스윙 저점·고점: 좌우 N봉보다 낮은 저가(높은 고가). 각 스윙의 CVD 값은 그 스윙 앞뒤 N봉 안의 CVD 최저(최고) 종가로 잡는다.</li>
+      <li><b>흡수 롱(1)</b>: 직전 스윙 저점보다 가격 저점은 높은데(HL) CVD 저점은 더 낮다(LL) — 시장가 매도를 지정가 매수가 받아냈다.
+        <b>흡수 숏(2)</b>: 가격 고점은 낮은데(LH) CVD 고점은 더 높다(HH) — 시장가 매수를 지정가 매도가 받아냈다.
+        음영 박스는 가격이 깨지 못한 직전 스윙 레벨부터 이번 스윙까지의 구간이다.</li>
+      <li><b>소진(3·4, 기본 숨김)</b>: 가격은 신고점(신저점)인데 CVD는 따라가지 못한 경우. 흔히 쓰이는 다이버전스지만 이 페이지는 흡수형만 기본 표시하고, 비교용으로 회색 표시를 켤 수 있다.</li>
+    </ul>
+    <strong>한계</strong>
+    <ul>
+      <li>스윙은 오른쪽 N봉이 지나야 확정된다. 그 전의 신호는 점선과 "미확정"으로 표시하며, 이후 봉에 따라 사라질 수 있다(리페인트). 확정 신호도 실제 스윙보다 N봉 늦게 뜬다.</li>
+      <li>캔들 데이터(klines)만 쓰므로 봉 안에서 CVD가 움직인 경로(꼬리)는 알 수 없다. 마지막 봉은 진행 중인 봉이다.</li>
+      <li>CVD의 절대값은 시작점에 따라 달라지므로 비교 구간 안의 상대 위치만 의미가 있다. 일일 리셋 모드에서는 같은 UTC 날짜 안의 스윙끼리만 비교한다(1d 봉에서는 리셋을 쓸 수 없다).</li>
+      <li>Binance 무기한 선물 한 곳의 체결만 반영한다. 이 판정 규칙의 매매 우위는 검증되지 않았다. 참고용 시각화이며 투자 조언이 아니다.</li>
+      <li>데이터: Binance USDT-M 선물 공개 API(klines)를 브라우저가 직접 조회. 일부 지역에서는 Binance 접속이 차단된다.
+        차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
+    </ul>
+  </footer>
+</main>
+<script>
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'SOLUSDT', 'ZECUSDT', 'TAOUSDT'];  // 청산 히트맵과 동일
+const TFS = ['5m', '15m', '1h', '4h', '1d'];
+const BARS = [300, 500, 1000, 1500];  // 1500 = klines 1회 요청 상한
+const DAY = 86400000;
+const API = 'https://fapi.binance.com';
+const UP = '#0ecb81', DOWN = '#f6465d', GRAY = '#898781';
+const KIND = {
+  absLong:  { label: '흡수 롱', color: UP },
+  absShort: { label: '흡수 숏', color: DOWN },
+  exhBear:  { label: '소진(3)', color: GRAY },
+  exhBull:  { label: '소진(4)', color: GRAY },
+};
+
+async function getJson(path, params) {
+  const r = await fetch(`${API}${path}?${new URLSearchParams(params)}`);
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body && body.msg ? body.msg : `HTTP ${r.status}`);
+  return body;
+}
+
+// 봉별 델타와 CVD. anchor === 'day'면 UTC 날짜가 바뀔 때 0부터 다시 누적
+function buildBars(rows, anchor) {
+  let cum = 0, day = null;
+  return rows.map(k => {
+    const t = k[0], d = 2 * +k[9] - +k[5], dd = Math.floor(t / DAY);
+    if (anchor === 'day' && dd !== day) { cum = 0; day = dd; }
+    const co = cum; cum += d;
+    return { t, o: +k[1], h: +k[2], l: +k[3], c: +k[4], d, co, cc: cum, day: dd };
+  });
+}
+
+// 좌우 N봉 프랙탈 피벗. 오른쪽이 N봉 미만이면 미확정(최근 것 1개만 유지)
+function findPivots(bars, N) {
+  const n = bars.length, out = { L: [], H: [] };
+  for (let i = N; i < n; i++) {
+    const right = Math.min(N, n - 1 - i);
+    for (const kind of ['L', 'H']) {
+      const v = kind === 'L' ? bars[i].l : bars[i].h;
+      let ok = true;
+      for (let j = i - N; j <= i + right && ok; j++) {
+        if (j === i) continue;
+        const w = kind === 'L' ? bars[j].l : bars[j].h;
+        // 왼쪽은 엄격히, 오른쪽은 같은 값 허용
+        if (kind === 'L' ? (j < i ? w <= v : w < v) : (j < i ? w >= v : w > v)) ok = false;
+      }
+      if (!ok) continue;
+      let ci = i - N;  // 스윙 앞뒤 N봉 안의 CVD 극값
+      for (let j = i - N; j <= i + right; j++) {
+        if (kind === 'L' ? bars[j].cc < bars[ci].cc : bars[j].cc > bars[ci].cc) ci = j;
+      }
+      out[kind].push({ i, price: v, ci, cvd: bars[ci].cc, confirmed: right === N });
+    }
+  }
+  for (const kind of ['L', 'H']) {
+    const conf = out[kind].filter(p => p.confirmed);
+    const pend = out[kind].filter(p => !p.confirmed).pop();
+    out[kind] = pend ? [...conf, pend] : conf;
+  }
+  return out;
+}
+
+function classify(kind, prev, cur) {
+  if (kind === 'L') {
+    if (cur.price > prev.price && cur.cvd < prev.cvd) return 'absLong';
+    if (cur.price < prev.price && cur.cvd > prev.cvd) return 'exhBull';
+  } else {
+    if (cur.price < prev.price && cur.cvd > prev.cvd) return 'absShort';
+    if (cur.price > prev.price && cur.cvd < prev.cvd) return 'exhBear';
+  }
+  return null;
+}
+
+function findSignals(bars, piv, anchor) {
+  const sigs = [];
+  for (const kind of ['L', 'H']) {
+    const ps = piv[kind];
+    for (let k = 1; k < ps.length; k++) {
+      const prev = ps[k - 1], cur = ps[k];
+      if (anchor === 'day' && new Set([prev.i, prev.ci, cur.i, cur.ci].map(i => bars[i].day)).size > 1) continue;
+      const type = classify(kind, prev, cur);
+      if (type) sigs.push({ kind, type, prev, cur });
+    }
+  }
+  return sigs.sort((a, b) => a.cur.i - b.cur.i);
+}
+
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+const fmt = p => p >= 1000 ? p.toLocaleString('en-US', { maximumFractionDigits: 0 }) : p.toPrecision(5);
+const when = t => new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
+
+let last = null;
+function render() {
+  if (!last) return;
+  const { bars, piv, sigs } = last;
+  const showExh = document.getElementById('exh').checked;
+  const showDelta = document.getElementById('dlt').checked;
+  const x = bars.map(b => new Date(b.t)), X = i => x[i];
+  const ink = css('--ink2'), grid = css('--grid');
+  const candle = { increasing: { line: { color: UP }, fillcolor: UP }, decreasing: { line: { color: DOWN }, fillcolor: DOWN }, showlegend: false };
+
+  const traces = [
+    { type: 'candlestick', name: '가격', x, open: bars.map(b => b.o), high: bars.map(b => b.h),
+      low: bars.map(b => b.l), close: bars.map(b => b.c), xaxis: 'x', yaxis: 'y', ...candle },
+    { type: 'candlestick', name: 'CVD', x, open: bars.map(b => b.co), close: bars.map(b => b.cc),
+      high: bars.map(b => Math.max(b.co, b.cc)), low: bars.map(b => Math.min(b.co, b.cc)), xaxis: 'x', yaxis: 'y2', ...candle },
+  ];
+  for (const kind of ['L', 'H']) {
+    const ps = piv[kind], sym = kind === 'L' ? 'triangle-up' : 'triangle-down';
+    const mk = { symbol: sym, size: 7, color: ps.map(p => p.confirmed ? ink : 'rgba(0,0,0,0)'), line: { color: ink, width: 1 } };
+    traces.push({ type: 'scatter', mode: 'markers', x: ps.map(p => X(p.i)), y: ps.map(p => kind === 'L' ? p.price * 0.999 : p.price * 1.001),
+      marker: mk, yaxis: 'y', hoverinfo: 'skip', showlegend: false });
+    traces.push({ type: 'scatter', mode: 'markers', x: ps.map(p => X(p.ci)), y: ps.map(p => p.cvd),
+      marker: { ...mk, size: 6 }, yaxis: 'y2', hoverinfo: 'skip', showlegend: false });
+  }
+  if (showDelta) {
+    traces.push({ type: 'bar', name: '델타', x, y: bars.map(b => b.d), yaxis: 'y3', showlegend: false,
+      marker: { color: bars.map(b => b.d >= 0 ? UP : DOWN) } });
+  }
+
+  const shapes = [], annotations = [];
+  for (const s of sigs) {
+    if (s.type.startsWith('exh') && !showExh) continue;
+    const { color, label } = KIND[s.type], dash = s.cur.confirmed ? 'solid' : 'dot';
+    const line = { color, width: 2, dash };
+    shapes.push({ type: 'line', xref: 'x', yref: 'y', x0: X(s.prev.i), y0: s.prev.price, x1: X(s.cur.i), y1: s.cur.price, line });
+    shapes.push({ type: 'line', xref: 'x', yref: 'y2', x0: X(s.prev.ci), y0: s.prev.cvd, x1: X(s.cur.ci), y1: s.cur.cvd, line });
+    if (s.type.startsWith('abs')) {  // 가격이 깨지 못한 직전 스윙 레벨 ~ 이번 스윙
+      shapes.push({ type: 'rect', xref: 'x', yref: 'y', x0: X(s.prev.i), x1: X(s.cur.i), y0: s.prev.price, y1: s.cur.price,
+        fillcolor: alpha(color, 0.12), line: { width: 0 }, layer: 'below' });
+    }
+    annotations.push({ xref: 'x', yref: 'y', x: X(s.cur.i), y: s.cur.price, text: s.cur.confirmed ? label : `${label} · 미확정`,
+      showarrow: true, arrowhead: 0, arrowcolor: color, ax: 0, ay: s.kind === 'L' ? 28 : -28,
+      font: { size: 11, color: '#fff' }, bgcolor: color, borderpad: 2 });
+  }
+
+  const dom = showDelta ? { y: [0.46, 1], y2: [0.2, 0.43], y3: [0, 0.17] } : { y: [0.4, 1], y2: [0, 0.37] };
+  const ax = d => ({ domain: d, side: 'right', gridcolor: grid, zerolinecolor: css('--axis') });
+  const layout = {
+    paper_bgcolor: css('--surface'), plot_bgcolor: css('--surface'), font: { color: ink, size: 12 },
+    margin: { l: 10, r: 70, t: 10, b: 36 }, hovermode: 'x unified', dragmode: 'pan',
+    xaxis: { rangeslider: { visible: false }, gridcolor: grid, showspikes: true, spikemode: 'across', spikethickness: 1, spikecolor: ink },
+    yaxis: { ...ax(dom.y), tickformat: ',.5r', title: { text: '가격', standoff: 4 } },
+    yaxis2: { ...ax(dom.y2), tickformat: '.3s', title: { text: 'CVD', standoff: 4 } },
+    shapes, annotations,
+  };
+  if (showDelta) layout.yaxis3 = { ...ax(dom.y3), tickformat: '.2s', title: { text: '델타', standoff: 4 } };
+  Plotly.react('chart', traces, layout, { responsive: true, displaylogo: false, scrollZoom: true });
+
+  const shown = sigs.filter(s => showExh || s.type.startsWith('abs'));
+  const s = shown[shown.length - 1];
+  document.getElementById('last').innerHTML = s
+    ? `최근 신호: <span class="tag" style="background:${KIND[s.type].color}">${KIND[s.type].label}</span> ` +
+      `${when(bars[s.cur.i].t)} · 가격 ${fmt(s.cur.price)} · ${s.cur.confirmed ? '확정' : '미확정'} · 표시된 신호 ${shown.length}개`
+    : '표시할 신호 없음';
+}
+
+const status = document.getElementById('status');
+const symSel = document.getElementById('sym'), barsSel = document.getElementById('bars');
+const anchorSel = document.getElementById('anchor'), pivIn = document.getElementById('pivn');
+let tf = '1h', rows = null;
+
+function recompute() {
+  if (!rows) return;
+  const N = Math.min(10, Math.max(1, Math.round(+pivIn.value) || 3));
+  pivIn.value = N;
+  const anchor = tf === '1d' ? 'window' : anchorSel.value;
+  const bars = buildBars(rows, anchor);
+  const piv = findPivots(bars, N);
+  last = { bars, piv, sigs: findSignals(bars, piv, anchor) };
+  render();
+}
+
+async function load() {
+  const sym = symSel.value, n = +barsSel.value;
+  anchorSel.disabled = tf === '1d';
+  status.className = ''; status.textContent = `${sym} ${tf} 불러오는 중…`;
+  history.replaceState(null, '', `?symbol=${sym}&tf=${tf}&bars=${n}`);
+  try {
+    rows = await getJson('/fapi/v1/klines', { symbol: sym, interval: tf, limit: n });
+    if (!rows.length) throw new Error('캔들 데이터 없음');
+    recompute();
+    const asof = new Date().toLocaleString('ko-KR', { hour12: false });
+    status.textContent = `${sym} · ${tf} · ${rows.length}봉 · 현재가 ${fmt(+rows[rows.length - 1][4])} · 조회 ${asof}`;
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = `불러오기 실패: ${e.message}. Binance 접속이 차단된 지역인지 확인하세요.`;
+  }
+}
+
+const seg = document.getElementById('tfs');
+for (const k of TFS) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = k; b.dataset.tf = k;
+  b.onclick = () => { tf = k; syncSeg(); load(); };
+  seg.appendChild(b);
+}
+function syncSeg() { for (const b of seg.children) b.setAttribute('aria-pressed', b.dataset.tf === tf); }
+
+const q = new URLSearchParams(location.search);
+for (const s of SYMBOLS) symSel.add(new Option(s.replace('USDT', ''), s));
+for (const b of BARS) barsSel.add(new Option(b, b));
+barsSel.value = '500';
+if (SYMBOLS.includes((q.get('symbol') || '').toUpperCase())) symSel.value = q.get('symbol').toUpperCase();
+if (TFS.includes(q.get('tf'))) tf = q.get('tf');
+if (BARS.includes(+q.get('bars'))) barsSel.value = q.get('bars');
+syncSeg();
+document.getElementById('go').onclick = load;
+symSel.onchange = load;
+barsSel.onchange = load;
+pivIn.onchange = recompute;
+anchorSel.onchange = recompute;
+document.getElementById('exh').onchange = render;
+document.getElementById('dlt').onchange = render;
+
+function currentMode() {
+  const forced = document.documentElement.dataset.theme;
+  return forced || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+document.getElementById('themeBtn').onclick = () => {
+  document.documentElement.dataset.theme = currentMode() === 'dark' ? 'light' : 'dark';
+  render();
+};
+load();
+</script>
+</body>
+</html>

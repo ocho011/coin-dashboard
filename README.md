@@ -6,6 +6,7 @@
 |---|---|---|
 | BTC 사이클 지표 | `/` | `build.py` + `template.html` (빌드 시 데이터 내장) |
 | 추정 청산 히트맵 | `/heatmap/` | `heatmap.html` (정적, 브라우저가 Binance API를 직접 조회해 계산) |
+| CVD 다이버전스 | `/cvd/` | `cvd.html` (정적, Binance 선물 klines의 테이커 매수량으로 CVD 계산, 흡수형 다이버전스 표시) |
 
 청산 히트맵은 미결제약정 증가분에 가정한 레버리지 분포를 적용한 추정치다. 모델·한계·검증 결과는 페이지 하단에 있다.
 모델 원형(Python)과 매매 신호 반증 테스트는 `research/liq-heatmap/` — 판정 규칙과 결과는 `PREREG.md`, 재실행은 `python3 falsify.py`(데이터 약 44MB를 `data/`에 받음).
