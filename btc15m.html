@@ -94,7 +94,7 @@ footer a { color: inherit; }
     <ul>
       <li>CVD = 시장가 매수 체결 대금 − 시장가 매도 체결 대금의 누적. 15분봉마다 델타 = 2 × 테이커 매수 대금 − 거래 대금. 누적 시작점은 표시 구간의 첫 봉이라 절대값이 아니라 기울기와 상대 위치를 본다.</li>
       <li>Coinbase 프리미엄 = (Coinbase BTC-USD 종가 ÷ Binance 현물 BTCUSDT 종가 − 1) × 100. Binance가 USDT 호가이므로 USDT/USD 괴리가 섞인다. 음수면 Coinbase가 싸다.</li>
-      <li>세션 박스(UTC 기준, 코드 상단 <code>SESSIONS</code>에서 변경): 아시아 00–08시, 런던 07–16시, 뉴욕 13–22시. 박스는 세션 중 고가·저가 범위, 점선은 진행 중이면 현재까지의 고저. PDH·PDL은 직전 UTC 일(00–24시)의 고가·저가.</li>
+      <li>세션 박스(UTC 기준, 코드 상단 <code>SESSIONS</code>에서 변경): 아시아 00–08시, 런던 07–16시, 뉴욕 13–22시. 박스는 세션 중 고가·저가 범위(진행 중이면 현재까지). 세션마다 가장 최근 회차의 고가·저가는 세션 시작부터 오른쪽 끝까지 점선(ASIA/LDN/NY H·L)으로 연장한다. PDH·PDL은 직전 UTC 일(00–24시)의 고가·저가.</li>
       <li>EMA는 표시 구간 앞의 봉까지 포함해 계산한다(최대 1000봉 조회).</li>
     </ul>
     <strong>한계</strong>
@@ -119,9 +119,9 @@ const M15 = 900000, DAY = 86400000, KST = 9 * 3600000;
 const EMAS = [[20, '#7fd1c1'], [50, '#a9a9d6'], [100, '#d6c38a'], [200, '#9aa7c9']];
 // UTC 시(hour) 기준 [시작, 끝)
 const SESSIONS = [
-  { name: '아시아', s: 0, e: 8, color: '#d6849b' },
-  { name: '런던', s: 7, e: 16, color: '#5fb5a0' },
-  { name: '뉴욕', s: 13, e: 22, color: '#d9a05b' },
+  { name: '아시아', tag: 'ASIA', s: 0, e: 8, color: '#d6849b' },
+  { name: '런던', tag: 'LDN', s: 7, e: 16, color: '#5fb5a0' },
+  { name: '뉴욕', tag: 'NY', s: 13, e: 22, color: '#d9a05b' },
 ];
 
 async function getJson(url, params) {
@@ -180,6 +180,7 @@ function render() {
       ann.push({ xref: 'paper', x: 1, xanchor: 'left', yref: 'y', y: v, text: name, showarrow: false, font: { size: 11, color: css('--muted') } });
     }
   }
+  const lastSess = {};
   for (let d = Math.floor(t0 / DAY) * DAY - DAY; d <= tN; d += DAY) {
     for (const s of SESSIONS) {
       const a = d + s.s * 3600000, b = d + s.e * 3600000;
@@ -192,6 +193,16 @@ function render() {
         fillcolor: alpha(s.color, 0.10), line: { color: alpha(s.color, 0.6), width: 1, dash: 'dot' }, layer: 'below' });
       ann.push({ xref: 'x', yref: 'y', x: xa, y: hi, text: s.name, showarrow: false, xanchor: 'left', yanchor: 'bottom',
         font: { size: 10, color: s.color } });
+      lastSess[s.name] = { s, xa, hi, lo };  // 날짜 오름차순이라 마지막 대입이 가장 최근 세션
+    }
+  }
+  // 세션별 가장 최근 고가·저가를 세션 시작부터 오른쪽 끝까지 점선으로 연장
+  for (const { s, xa, hi, lo } of Object.values(lastSess)) {
+    for (const [v, tag] of [[hi, 'H'], [lo, 'L']]) {
+      shapes.push({ type: 'line', xref: 'x', yref: 'y', x0: xa, x1: xs[xs.length - 1], y0: v, y1: v,
+        line: { color: s.color, width: 1, dash: 'dash' } });
+      ann.push({ xref: 'paper', x: 1, xanchor: 'left', yref: 'y', y: v, text: `${s.tag} ${tag}`, showarrow: false,
+        font: { size: 10, color: s.color } });
     }
   }
 
@@ -203,7 +214,7 @@ function render() {
       line: { color, width: 1.2 }, hoverinfo: 'skip' });
   }
   Plotly.react('main', traces, baseLayout({
-    margin: { l: 8, r: 58, t: 24, b: 36 }, showlegend: true, legend: { orientation: 'h', y: 1.06, x: 0 },
+    margin: { l: 8, r: 70, t: 24, b: 36 }, showlegend: true, legend: { orientation: 'h', y: 1.06, x: 0 },
     xaxis: { type: 'category', nticks: 8, rangeslider: { visible: false }, gridcolor: css('--grid') },
     yaxis: axis({ side: 'right', tickformat: ',.0f', autorange: true }), shapes, annotations: ann,
   }), cfg);
