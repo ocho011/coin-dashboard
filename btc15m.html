@@ -96,6 +96,7 @@ footer a { color: inherit; }
       <li>Coinbase 프리미엄 = (Coinbase BTC-USD 종가 ÷ Binance 현물 BTCUSDT 종가 − 1) × 100. Binance가 USDT 호가이므로 USDT/USD 괴리가 섞인다. 음수면 Coinbase가 싸다.</li>
       <li>세션 박스(UTC 기준, 코드 상단 <code>SESSIONS</code>에서 변경): 아시아 00–08시, 런던 07–16시, 뉴욕 13–22시. 박스는 세션 중 고가·저가 범위(진행 중이면 현재까지). 세션마다 가장 최근 회차의 고가·저가는 세션 시작부터 오른쪽 끝까지 점선(ASIA/LDN/NY H·L)으로 연장한다. PDH·PDL은 직전 UTC 일(00–24시)의 고가·저가.</li>
       <li>EMA는 표시 구간 앞의 봉까지 포함해 계산한다(최대 1000봉 조회).</li>
+      <li><b>BB(브레이커 블록)</b>: 오더블록 = 급변 직전의 마지막 반대색 봉의 몸통. 급변 기준은 직후 3봉 안에 그 봉 종가에서 ATR(14)의 2배 이상 움직인 경우(이 페이지의 임의 기준). 이후 종가가 오더블록을 반대쪽으로 뚫고 마감하면 브레이커가 된다 — 양봉 OB를 위로 뚫으면 상승 BB(초록, 지지 후보), 음봉 OB를 아래로 뚫으면 하락 BB(빨강, 저항 후보). 다시 원래 방향으로 뚫고 마감하면 지운다. 표시 구간 안에서 생긴 유효 BB 중 최근 3개만 그린다.</li>
     </ul>
     <strong>한계</strong>
     <ul>
@@ -143,6 +144,40 @@ function ema(vals, n) {
   for (let i = 0; i < vals.length; i++) {
     e = e === null ? vals[i] : vals[i] * k + e * (1 - k);
     out.push(i < n - 1 ? null : e);
+  }
+  return out;
+}
+// 브레이커 블록(ICT). 오더블록 = 급변 직전의 마지막 반대색 봉(몸통 범위).
+// 급변: 직후 BB_N봉 안에 그 봉 종가에서 ATR(14) × BB_K 이상 움직임.
+// 이후 종가가 오더블록을 반대편으로 뚫고 마감하면 브레이커가 되고, 다시 원래 방향으로 뚫고 마감하면 무효.
+const BB_N = 3, BB_K = 2, BB_SHOW = 3;
+function atr(rows, n = 14) {
+  const out = []; let a = null;
+  for (let i = 0; i < rows.length; i++) {
+    const h = +rows[i][2], l = +rows[i][3], pc = i ? +rows[i - 1][4] : +rows[i][4];
+    const tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+    a = a === null ? tr : (a * (n - 1) + tr) / n;
+    out.push(i < n - 1 ? null : a);
+  }
+  return out;
+}
+function breakers(rows) {
+  const A = atr(rows), out = [];
+  const O = i => +rows[i][1], C = i => +rows[i][4], H = i => +rows[i][2], L = i => +rows[i][3];
+  for (let i = 14; i < rows.length - BB_N; i++) {
+    const up = C(i) > O(i), dn = C(i) < O(i);
+    if (!up && !dn) continue;
+    let ext = C(i);
+    for (let j = i + 1; j <= i + BB_N; j++) ext = up ? Math.min(ext, L(j)) : Math.max(ext, H(j));
+    if (Math.abs(C(i) - ext) < BB_K * A[i]) continue;          // 급변 아님
+    const top = Math.max(O(i), C(i)), bot = Math.min(O(i), C(i));
+    // 양봉 OB(하락 오더블록) → 위로 마감 돌파 시 상승 브레이커, 음봉 OB는 반대
+    let brk = -1, end = rows.length - 1;
+    for (let j = i + BB_N + 1; j < rows.length; j++) {
+      if (brk < 0) { if (up ? C(j) > top : C(j) < bot) brk = j; }
+      else if (up ? C(j) < bot : C(j) > top) { end = j; break; }  // 원래 방향으로 다시 뚫으면 무효
+    }
+    if (brk >= 0) out.push({ i, brk, end, top, bot, bull: up, live: end === rows.length - 1 });
   }
   return out;
 }
@@ -204,6 +239,16 @@ function render() {
       ann.push({ xref: 'paper', x: 1, xanchor: 'left', yref: 'y', y: v, text: `${s.tag} ${tag}`, showarrow: false,
         font: { size: 10, color: s.color } });
     }
+  }
+
+  // 브레이커 블록: 표시 구간 안에서 형성된 것 중 아직 유효한 최근 BB_SHOW개
+  const bbs = breakers(fut).filter(b => b.i >= from && b.live).slice(-BB_SHOW);
+  for (const b of bbs) {
+    const color = b.bull ? UP : DOWN;
+    shapes.push({ type: 'rect', xref: 'x', yref: 'y', x0: kst(fut[b.i][0]), x1: xs[xs.length - 1], y0: b.bot, y1: b.top,
+      fillcolor: alpha(color, 0.12), line: { color, width: 1.2 } });
+    ann.push({ xref: 'x', yref: 'y', x: xs[xs.length - 1], y: (b.top + b.bot) / 2, xanchor: 'left', text: ' BB',
+      showarrow: false, font: { size: 10, color } });
   }
 
   const traces = [{ type: 'candlestick', x: xs, open: bars.map(k => +k[1]), high: bars.map(k => +k[2]),
