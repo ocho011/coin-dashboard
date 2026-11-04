@@ -47,6 +47,7 @@ button, select { background: var(--surface); color: var(--ink2); border: 1px sol
 .grid h2 { font-size: 13px; margin: 0 0 2px; font-weight: 600; }
 .grid .cur { color: var(--muted); font-size: 12px; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
 .grid .plot { width: 100%; height: 190px; }
+.grid .plot.na { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); font-size: 12px; border: 1px dashed var(--ring); border-radius: 8px; }
 footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
 footer li { margin: 2px 0; }
 footer a { color: inherit; }
@@ -79,10 +80,14 @@ footer a { color: inherit; }
 
   <div class="grid">
     <section class="panel"><h2>Coinbase 프리미엄 (%)</h2><div class="cur" id="c_prem"></div><div class="plot" id="p_prem"></div></section>
+    <section class="panel"><h2>Coinbase 현물 CVD (USD)</h2><div class="cur">수집기 필요 — 미구현</div><div class="plot na">공개 API로 과거 체결 방향을 받을 수 없음<br>(1000건 ≈ 3분치)</div></section>
     <section class="panel"><h2>Binance 선물 CVD (USD)</h2><div class="cur" id="c_fcvd"></div><div class="plot" id="p_fcvd"></div></section>
     <section class="panel"><h2>Binance 현물 CVD (USD)</h2><div class="cur" id="c_scvd"></div><div class="plot" id="p_scvd"></div></section>
-    <section class="panel"><h2>Binance 선물 OI (USD)</h2><div class="cur" id="c_oi"></div><div class="plot" id="p_oi"></div></section>
-    <section class="panel"><h2>Binance 펀딩 (8시간, %)</h2><div class="cur" id="c_fund"></div><div class="plot" id="p_fund"></div></section>
+    <section class="panel"><h2>Hyperliquid 선물 CVD (USD)</h2><div class="cur">수집기 필요 — 미구현</div><div class="plot na">최근 체결 10건(≈3초)만 제공<br>캔들에는 매수·매도 구분이 없음</div></section>
+    <section class="panel"><h2>Hyperliquid 현물 CVD (USD)</h2><div class="cur">수집기 필요 — 미구현</div><div class="plot na">위와 같은 이유</div></section>
+    <section class="panel"><h2>합산 OI (USD) · Binance+Bybit</h2><div class="cur" id="c_oi"></div><div class="plot" id="p_oi"></div></section>
+    <section class="panel"><h2>청산 (USD) · OKX만</h2><div class="cur" id="c_liq"></div><div class="plot" id="p_liq"></div></section>
+    <section class="panel"><h2>펀딩 · 8시간 · 3거래소 평균 (%)</h2><div class="cur" id="c_fund"></div><div class="plot" id="p_fund"></div></section>
   </div>
 
   <footer>
@@ -95,11 +100,14 @@ footer a { color: inherit; }
     </ul>
     <strong>한계</strong>
     <ul>
-      <li>CVD·OI·펀딩은 Binance 한 곳의 값이다. 다른 거래소의 선물/현물·합산 OI·합산 청산·Hyperliquid·Coinbase CVD는 이 페이지에 없다(공개 API로 브라우저에서 안정적으로 얻기 어렵다).</li>
+      <li><b>미구현 3개</b>: Coinbase 현물·Hyperliquid 선물·Hyperliquid 현물 CVD. 공개 REST가 과거 체결의 매수·매도 방향을 주지 않는다(Coinbase 체결 1000건 ≈ 3분, Hyperliquid 최근 체결 10건 ≈ 3초). 상시 체결 수집기를 따로 돌려야 한다.</li>
+      <li>선물·현물 CVD와 프리미엄은 Binance(와 Coinbase 가격)만 쓴다. 합산 OI는 Binance + Bybit(USDT 선형 + 코인마진)이며 OKX·Hyperliquid 등은 빠져 있어 원본의 "거래소 합산"보다 작다(OKX OI 이력은 브라우저 접근이 차단됨).</li>
+      <li>청산은 OKX BTC-USDT 무기한만이다(1계약 = 0.01 BTC, 롱 청산 음수). Binance·Bybit 청산 이력은 공개 REST가 없다. 조회 가능 구간은 최근 체결 약 2000건까지라 표시 구간보다 짧을 수 있다.</li>
+      <li>펀딩은 Binance·Bybit·OKX 세 곳이 모두 있는 정산 시각의 단순 평균이다(원본은 Coinalyze 집계로 방식이 다를 수 있음).</li>
       <li>세션 시간대 정의는 사람마다 다르다. 위 값은 이 페이지의 가정이다.</li>
-      <li>OI는 Binance openInterestHist(15분, 최근 약 5일 이내 구간만 사용). 펀딩은 8시간 간격이라 최근 30회(약 10일)를 따로 보여 준다.</li>
+      <li>OI는 Binance openInterestHist(15분, 최대 약 5일). 펀딩은 8시간 간격이라 최근 30회(약 10일)를 따로 보여 준다.</li>
       <li>마지막 봉은 진행 중이다. 일부 지역에서는 Binance 접속이 차단된다. 참고용 시각화이며 투자 조언이 아니다.</li>
-      <li>데이터: Binance 공개 API, Coinbase Exchange 공개 API. 차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
+      <li>데이터: Binance·Bybit·OKX·Coinbase Exchange 공개 API. 차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
     </ul>
   </footer>
 </main>
@@ -154,7 +162,7 @@ const ticks = x => { const v = [x[0], x[x.length >> 1], x[x.length - 1]]; return
 let state = null;
 function render() {
   if (!state) return;
-  const { fut, spot, cb, oi, fund, span } = state;
+  const { fut, spot, cb, oi, fund, span, extra: x_ } = state;
   const from = fut.length - span;
   const bars = fut.slice(from), xs = bars.map(k => kst(k[0]));
   const close = fut.map(k => +k[4]);
@@ -225,17 +233,78 @@ function render() {
       hovertemplate: '%{y:,.0f}<extra></extra>' }], `구간 누적 ${fmtS(c[c.length - 1])}`);
   }
 
-  // OI
-  const oiPts = oi.filter(o => o.timestamp >= t0);
-  small('p_oi', 'c_oi', [{ type: 'scatter', mode: 'lines', x: oiPts.map(o => kst(o.timestamp)), y: oiPts.map(o => +o.sumOpenInterestValue),
+  // 합산 OI = Binance + Bybit(USDT 선형 + 코인마진). 두 거래소 값이 모두 있는 15분 시각만 사용
+  const px = new Map(fut.map(k => [k[0], +k[4]]));
+  const byL = new Map(x_.bybitOI.map(o => [+o.timestamp, +o.openInterest])), byI = new Map(x_.bybitInv.map(o => [+o.timestamp, +o.openInterest]));
+  const oiPts = [];
+  for (const o of oi) {
+    const t = o.timestamp; if (t < t0) continue;
+    const bl = byL.get(t), bi = byI.get(t), p = px.get(t);
+    if (bl !== undefined && bi !== undefined && p) oiPts.push([t, +o.sumOpenInterestValue + bl * p + bi]);
+  }
+  small('p_oi', 'c_oi', [{ type: 'scatter', mode: 'lines', x: oiPts.map(p => kst(p[0])), y: oiPts.map(p => p[1]),
     line: { color: '#7fa3c9', width: 1.6 }, hovertemplate: '%{y:,.0f}<extra></extra>' }],
-    oiPts.length ? `최근 ${fmtS(+oiPts[oiPts.length - 1].sumOpenInterestValue).slice(1)}` : '데이터 없음',
+    oiPts.length ? `최근 ${fmtS(oiPts[oiPts.length - 1][1]).slice(1)}` : 'Bybit 데이터 없음 — 합산 불가',
     { tickformat: '.3s' });
 
-  // 펀딩(최근 30회, 8시간 간격 — 15분 구간과 별도)
-  const fr = fund.map(f => +f.fundingRate * 100);
-  small('p_fund', 'c_fund', [{ type: 'bar', x: fund.map(f => kst(+f.fundingTime)), y: fr, marker: { color: fr.map(v => v >= 0 ? UP : DOWN) },
-    hovertemplate: '%{y:.4f}%<extra></extra>' }], `최근 ${fr[fr.length - 1].toFixed(4)}% · 최근 ${fund.length}회`, { ticksuffix: '%' });
+  // OKX 청산(BTC-USDT-SWAP, 1계약 = 0.01 BTC). 롱 청산 = 음수, 숏 청산 = 양수
+  const buckets = new Map(bars.map(k => [k[0], 0]));
+  let liqFrom = Infinity;
+  for (const l of x_.okxLiq) {
+    const b = Math.floor(l.t / M15) * M15; liqFrom = Math.min(liqFrom, l.t);
+    if (buckets.has(b)) buckets.set(b, buckets.get(b) + l.usd);
+  }
+  small('p_liq', 'c_liq', [{ type: 'bar', x: xs, y: bars.map(k => buckets.get(k[0])),
+    marker: { color: bars.map(k => buckets.get(k[0]) >= 0 ? UP : DOWN) }, hovertemplate: '%{y:,.0f}<extra></extra>' }],
+    x_.okxLiq.length ? `조회 가능 구간: ${kst(liqFrom)} 이후` + (liqFrom > t0 ? ' (표시 구간보다 짧음)' : '') : '데이터 없음', { tickformat: '.3s' });
+
+  // 펀딩: 8시간 정산 시각별 Binance·Bybit·OKX 평균(최근 30회)
+  const fm = new Map();
+  const addF = (t, v, ex) => { const k = Math.round(t / 28800000) * 28800000; (fm.get(k) || fm.set(k, {}).get(k))[ex] = v * 100; };
+  fund.forEach(f => addF(+f.fundingTime, +f.fundingRate, 'b'));
+  x_.bybitFund.forEach(f => addF(+f.fundingRateTimestamp, +f.fundingRate, 'y'));
+  x_.okxFund.forEach(f => addF(+f.fundingTime, +f.fundingRate, 'o'));
+  const fk = [...fm.keys()].sort((a, b) => a - b).slice(-30).filter(k => Object.keys(fm.get(k)).length === 3);
+  const fr = fk.map(k => { const v = Object.values(fm.get(k)); return v.reduce((a, b) => a + b, 0) / 3; });
+  small('p_fund', 'c_fund', [{ type: 'bar', x: fk.map(kst), y: fr, marker: { color: fr.map(v => v >= 0 ? UP : DOWN) },
+    hovertemplate: '%{y:.4f}%<extra></extra>' }], fr.length ? `최근 ${fr[fr.length - 1].toFixed(4)}% · 3거래소 모두 있는 ${fr.length}회` : '데이터 없음', { ticksuffix: '%' });
+}
+
+// Bybit·OKX는 선택 데이터. 실패하면 빈 배열로 두고 해당 패널만 "데이터 없음"이 된다
+const BYBIT = 'https://api.bybit.com', OKX = 'https://www.okx.com';
+async function bybitOI(category, symbol) {
+  let rows = [], cursor = '';
+  for (let i = 0; i < 3; i++) {  // 페이지당 200건, 288봉 이상이면 최대 3쪽
+    const p = { category, symbol, intervalTime: '15min', limit: 200 };
+    if (cursor) p.cursor = cursor;
+    const j = await getJson(`${BYBIT}/v5/market/open-interest`, p);
+    rows = rows.concat(j.result.list);
+    cursor = j.result.nextPageCursor; if (!cursor) break;
+  }
+  return rows;
+}
+async function okxLiq() {  // 최근 청산 체결을 100건씩
+  const out = []; let after = '';
+  for (let i = 0; i < 20; i++) {  // 72시간 구간을 덮을 때까지(최대 20쪽)
+    const p = { instType: 'SWAP', uly: 'BTC-USDT', state: 'filled', limit: 100 };
+    if (after) p.after = after;
+    const j = await getJson(`${OKX}/api/v5/public/liquidation-orders`, p);
+    const det = (j.data[0] && j.data[0].details) || [];
+    if (!det.length) break;
+    for (const d of det) out.push({ t: +d.ts, usd: (d.posSide === 'long' ? -1 : 1) * (+d.sz) * 0.01 * (+d.bkPx) });
+    after = String(Math.min(...det.map(d => +d.ts)));
+    if (+after < Date.now() - 288 * M15) break;
+  }
+  return out;
+}
+async function loadExtra() {
+  const r = await Promise.allSettled([
+    bybitOI('linear', 'BTCUSDT'), bybitOI('inverse', 'BTCUSD'), okxLiq(),
+    getJson(`${BYBIT}/v5/market/funding/history`, { category: 'linear', symbol: 'BTCUSDT', limit: 40 }).then(j => j.result.list),
+    getJson(`${OKX}/api/v5/public/funding-rate-history`, { instId: 'BTC-USDT-SWAP', limit: 40 }).then(j => j.data),
+  ]);
+  const v = i => r[i].status === 'fulfilled' ? r[i].value : [];
+  return { bybitOI: v(0), bybitInv: v(1), okxLiq: v(2), bybitFund: v(3), okxFund: v(4) };
 }
 
 const status = document.getElementById('status'), spanSel = document.getElementById('span');
@@ -249,10 +318,11 @@ async function load() {
       getJson(`${SAPI}/api/v3/klines`, { symbol: 'BTCUSDT', interval: '15m', limit: 1000 }),
       getJson(`${CB}/products/BTC-USD/candles`, { granularity: 900 }),
       getJson(`${FAPI}/futures/data/openInterestHist`, { symbol: 'BTCUSDT', period: '15m', limit: 500 }),
-      getJson(`${FAPI}/fapi/v1/fundingRate`, { symbol: 'BTCUSDT', limit: 30 }),
+      getJson(`${FAPI}/fapi/v1/fundingRate`, { symbol: 'BTCUSDT', limit: 40 }),
     ]);
     if (fut.length < span + 5 || spot.length < span) throw new Error('캔들 데이터 부족');
-    state = { fut, spot, cb, oi, fund, span };
+    const extra = await loadExtra();
+    state = { fut, spot, cb, oi, fund, span, extra };
     render();
     status.textContent = `BTCUSDT · ${span}봉 · 현재가 ${fmtP(+fut[fut.length - 1][4])} · 조회 ${new Date().toLocaleString('ko-KR', { hour12: false })}`;
   } catch (e) {
