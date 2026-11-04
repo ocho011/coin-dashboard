@@ -47,7 +47,6 @@ button, select { background: var(--surface); color: var(--ink2); border: 1px sol
 .grid h2 { font-size: 13px; margin: 0 0 2px; font-weight: 600; }
 .grid .cur { color: var(--muted); font-size: 12px; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
 .grid .plot { width: 100%; height: 190px; }
-.grid .plot.na { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); font-size: 12px; border: 1px dashed var(--ring); border-radius: 8px; }
 footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
 footer li { margin: 2px 0; }
 footer a { color: inherit; }
@@ -80,13 +79,13 @@ footer a { color: inherit; }
 
   <div class="grid">
     <section class="panel"><h2>Coinbase 프리미엄 (%)</h2><div class="cur" id="c_prem"></div><div class="plot" id="p_prem"></div></section>
-    <section class="panel"><h2>Coinbase 현물 CVD (USD)</h2><div class="cur">수집기 필요 — 미구현</div><div class="plot na">공개 API로 과거 체결 방향을 받을 수 없음<br>(1000건 ≈ 3분치)</div></section>
+    <section class="panel"><h2>Coinbase 현물 CVD (USD)</h2><div class="cur" id="c_cbcvd"></div><div class="plot" id="p_cbcvd"></div></section>
     <section class="panel"><h2>Binance 선물 CVD (USD)</h2><div class="cur" id="c_fcvd"></div><div class="plot" id="p_fcvd"></div></section>
     <section class="panel"><h2>Binance 현물 CVD (USD)</h2><div class="cur" id="c_scvd"></div><div class="plot" id="p_scvd"></div></section>
-    <section class="panel"><h2>Hyperliquid 선물 CVD (USD)</h2><div class="cur">수집기 필요 — 미구현</div><div class="plot na">최근 체결 10건(≈3초)만 제공<br>캔들에는 매수·매도 구분이 없음</div></section>
-    <section class="panel"><h2>Hyperliquid 현물 CVD (USD)</h2><div class="cur">수집기 필요 — 미구현</div><div class="plot na">위와 같은 이유</div></section>
-    <section class="panel"><h2>합산 OI (USD) · Binance+Bybit</h2><div class="cur" id="c_oi"></div><div class="plot" id="p_oi"></div></section>
-    <section class="panel"><h2>청산 (USD) · OKX만</h2><div class="cur" id="c_liq"></div><div class="plot" id="p_liq"></div></section>
+    <section class="panel"><h2>Hyperliquid 선물 CVD (USD)</h2><div class="cur" id="c_hlfcvd"></div><div class="plot" id="p_hlfcvd"></div></section>
+    <section class="panel"><h2>Hyperliquid 현물 CVD (USD)</h2><div class="cur" id="c_hlscvd"></div><div class="plot" id="p_hlscvd"></div></section>
+    <section class="panel"><h2>합산 OI (USD) · 4거래소</h2><div class="cur" id="c_oi"></div><div class="plot" id="p_oi"></div></section>
+    <section class="panel"><h2>합산 청산 (USD) · 4거래소</h2><div class="cur" id="c_liq"></div><div class="plot" id="p_liq"></div></section>
     <section class="panel"><h2>펀딩 · 8시간 · 3거래소 평균 (%)</h2><div class="cur" id="c_fund"></div><div class="plot" id="p_fund"></div></section>
   </div>
 
@@ -100,20 +99,22 @@ footer a { color: inherit; }
     </ul>
     <strong>한계</strong>
     <ul>
-      <li><b>미구현 3개</b>: Coinbase 현물·Hyperliquid 선물·Hyperliquid 현물 CVD. 공개 REST가 과거 체결의 매수·매도 방향을 주지 않는다(Coinbase 체결 1000건 ≈ 3분, Hyperliquid 최근 체결 10건 ≈ 3초). 상시 체결 수집기를 따로 돌려야 한다.</li>
-      <li>선물·현물 CVD와 프리미엄은 Binance(와 Coinbase 가격)만 쓴다. 합산 OI는 Binance + Bybit(USDT 선형 + 코인마진)이며 OKX·Hyperliquid 등은 빠져 있어 원본의 "거래소 합산"보다 작다(OKX OI 이력은 브라우저 접근이 차단됨).</li>
-      <li>청산은 OKX BTC-USDT 무기한만이다(1계약 = 0.01 BTC, 롱 청산 음수). Binance·Bybit 청산 이력은 공개 REST가 없다. 조회 가능 구간은 최근 체결 약 2000건까지라 표시 구간보다 짧을 수 있다.</li>
+      <li><b>수집 데이터</b>(Coinbase·Hyperliquid CVD, 합산 OI, 합산 청산): <a href="https://openmarket.xyz/api" target="_blank" rel="noopener">OpenMarket Data API</a>를 개인 수집기가 30분마다 받아 저장한 값이다. 최신 봉이 최대 30분 늦을 수 있고, 수집기가 멈추면 패널 상단의 "수집 최신" 시각이 멈춘다. 보관은 최근 8일.</li>
+      <li>Coinbase는 BTC-USD, Hyperliquid 현물은 UBTC/USDC(@142). 합산 OI·청산은 Binance·Bybit·OKX의 USDT 무기한과 Hyperliquid 무기한 4곳의 합이며, 코인마진·기타 거래소는 빠져 있다. OI는 4곳 값이 모두 있는 시각만 그린다.</li>
+      <li>청산은 거래소가 보고한 BTC 수량에 Binance 선물 종가를 곱한 근사 USD다. 롱 청산은 음수, 숏 청산은 양수.</li>
       <li>펀딩은 Binance·Bybit·OKX 세 곳이 모두 있는 정산 시각의 단순 평균이다(원본은 Coinalyze 집계로 방식이 다를 수 있음).</li>
       <li>세션 시간대 정의는 사람마다 다르다. 위 값은 이 페이지의 가정이다.</li>
-      <li>OI는 Binance openInterestHist(15분, 최대 약 5일). 펀딩은 8시간 간격이라 최근 30회(약 10일)를 따로 보여 준다.</li>
+      <li>펀딩은 8시간 간격이라 최근 30회(약 10일)를 따로 보여 준다.</li>
       <li>마지막 봉은 진행 중이다. 일부 지역에서는 Binance 접속이 차단된다. 참고용 시각화이며 투자 조언이 아니다.</li>
-      <li>데이터: Binance·Bybit·OKX·Coinbase Exchange 공개 API. 차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
+      <li>데이터: Binance·Bybit·OKX·Coinbase Exchange 공개 API, OpenMarket Data API(수집분). 차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
     </ul>
   </footer>
 </main>
 <script>
 const FAPI = 'https://fapi.binance.com', SAPI = 'https://api.binance.com', CB = 'https://api.exchange.coinbase.com';
 const UP = '#0ecb81', DOWN = '#f6465d';
+// 수집 데이터(Supabase). publishable 키는 읽기 전용(RLS: SELECT만)이라 공개해도 된다
+const SB = 'https://sfsbzelgippijjzkucpe.supabase.co', SB_KEY = 'sb_publishable_stRt47F1EsL9JGu2qFmzzQ_KHO8lUeG';
 const M15 = 900000, DAY = 86400000, KST = 9 * 3600000;
 const EMAS = [[20, '#7fd1c1'], [50, '#a9a9d6'], [100, '#d6c38a'], [200, '#9aa7c9']];
 // UTC 시(hour) 기준 [시작, 끝)
@@ -162,7 +163,7 @@ const ticks = x => { const v = [x[0], x[x.length >> 1], x[x.length - 1]]; return
 let state = null;
 function render() {
   if (!state) return;
-  const { fut, spot, cb, oi, fund, span, extra: x_ } = state;
+  const { fut, spot, cb, fund, span, extra: x_ } = state;
   const from = fut.length - span;
   const bars = fut.slice(from), xs = bars.map(k => kst(k[0]));
   const close = fut.map(k => +k[4]);
@@ -233,30 +234,39 @@ function render() {
       hovertemplate: '%{y:,.0f}<extra></extra>' }], `구간 누적 ${fmtS(c[c.length - 1])}`);
   }
 
-  // 합산 OI = Binance + Bybit(USDT 선형 + 코인마진). 두 거래소 값이 모두 있는 15분 시각만 사용
-  const px = new Map(fut.map(k => [k[0], +k[4]]));
-  const byL = new Map(x_.bybitOI.map(o => [+o.timestamp, +o.openInterest])), byI = new Map(x_.bybitInv.map(o => [+o.timestamp, +o.openInterest]));
-  const oiPts = [];
-  for (const o of oi) {
-    const t = o.timestamp; if (t < t0) continue;
-    const bl = byL.get(t), bi = byI.get(t), p = px.get(t);
-    if (bl !== undefined && bi !== undefined && p) oiPts.push([t, +o.sumOpenInterestValue + bl * p + bi]);
+  // 수집 데이터: CVD(매수 − 매도 누적), 합산 OI, 합산 청산
+  const fl = state.flow, get = (k, t) => fl && fl[k] ? fl[k].get(t) : undefined;
+  const asof = fl && fl.latest ? ` · 수집 최신 ${kst(fl.latest)}` : '';
+  for (const [id, curId, key, color] of [['p_cbcvd', 'c_cbcvd', 'cb', '#7fa3c9'], ['p_hlfcvd', 'c_hlfcvd', 'hlf', '#d9a05b'], ['p_hlscvd', 'c_hlscvd', 'hls', '#5fb5a0']]) {
+    let c = 0, any = false;
+    const y = bars.map(k => {
+      const bu = get(key + '_buy', k[0]), se = get(key + '_sell', k[0]);
+      if (bu === undefined && se === undefined) return null;   // 미수집 봉은 끊어서 표시
+      any = true; return (c += (bu || 0) - (se || 0));
+    });
+    small(id, curId, [{ type: 'scatter', mode: 'lines', x: xs, y, line: { color, width: 1.6 }, connectgaps: false,
+      hovertemplate: '%{y:,.0f}<extra></extra>' }], any ? `구간 누적 ${fmtS(c)}${asof}` : (fl ? '수집 데이터 없음' : '수집 데이터 불러오기 실패'));
   }
-  small('p_oi', 'c_oi', [{ type: 'scatter', mode: 'lines', x: oiPts.map(p => kst(p[0])), y: oiPts.map(p => p[1]),
-    line: { color: '#7fa3c9', width: 1.6 }, hovertemplate: '%{y:,.0f}<extra></extra>' }],
-    oiPts.length ? `최근 ${fmtS(oiPts[oiPts.length - 1][1]).slice(1)}` : 'Bybit 데이터 없음 — 합산 불가',
+
+  const VEN = ['bn', 'by', 'ok', 'hl'];
+  const oiPts = bars.map(k => {
+    const v = VEN.map(e => get('oi_' + e, k[0]));
+    return v.every(x => x !== undefined) ? v.reduce((p, q) => p + q, 0) : null;
+  });
+  const oiLast = oiPts.filter(v => v !== null).pop();
+  small('p_oi', 'c_oi', [{ type: 'scatter', mode: 'lines', x: xs, y: oiPts, line: { color: '#7fa3c9', width: 1.6 }, connectgaps: false,
+    hovertemplate: '%{y:,.0f}<extra></extra>' }], oiLast !== undefined ? `최근 ${fmtS(oiLast).slice(1)}${asof}` : (fl ? '수집 데이터 없음' : '수집 데이터 불러오기 실패'),
     { tickformat: '.3s' });
 
-  // OKX 청산(BTC-USDT-SWAP, 1계약 = 0.01 BTC). 롱 청산 = 음수, 숏 청산 = 양수
-  const buckets = new Map(bars.map(k => [k[0], 0]));
-  let liqFrom = Infinity;
-  for (const l of x_.okxLiq) {
-    const b = Math.floor(l.t / M15) * M15; liqFrom = Math.min(liqFrom, l.t);
-    if (buckets.has(b)) buckets.set(b, buckets.get(b) + l.usd);
-  }
-  small('p_liq', 'c_liq', [{ type: 'bar', x: xs, y: bars.map(k => buckets.get(k[0])),
-    marker: { color: bars.map(k => buckets.get(k[0]) >= 0 ? UP : DOWN) }, hovertemplate: '%{y:,.0f}<extra></extra>' }],
-    x_.okxLiq.length ? `조회 가능 구간: ${kst(liqFrom)} 이후` + (liqFrom > t0 ? ' (표시 구간보다 짧음)' : '') : '데이터 없음', { tickformat: '.3s' });
+  // 청산: (숏 − 롱) BTC × Binance 선물 종가. 청산이 없는 봉은 행이 없으므로 0
+  const liq = bars.map(k => {
+    if (!fl || k[0] > fl.latest) return null;
+    let btc = 0;
+    for (const e of VEN) btc += (get(`liq_${e}_short`, k[0]) || 0) - (get(`liq_${e}_long`, k[0]) || 0);
+    return btc * +k[4];
+  });
+  small('p_liq', 'c_liq', [{ type: 'bar', x: xs, y: liq, marker: { color: liq.map(v => v >= 0 ? UP : DOWN) },
+    hovertemplate: '%{y:,.0f}<extra></extra>' }], fl ? `롱 청산 음수 · 숏 청산 양수${asof}` : '수집 데이터 불러오기 실패', { tickformat: '.3s' });
 
   // 펀딩: 8시간 정산 시각별 Binance·Bybit·OKX 평균(최근 30회)
   const fm = new Map();
@@ -270,41 +280,33 @@ function render() {
     hovertemplate: '%{y:.4f}%<extra></extra>' }], fr.length ? `최근 ${fr[fr.length - 1].toFixed(4)}% · 3거래소 모두 있는 ${fr.length}회` : '데이터 없음', { ticksuffix: '%' });
 }
 
-// Bybit·OKX는 선택 데이터. 실패하면 빈 배열로 두고 해당 패널만 "데이터 없음"이 된다
+// Bybit·OKX 펀딩은 선택 데이터. 실패하면 빈 배열로 두고 해당 패널만 "데이터 없음"이 된다
 const BYBIT = 'https://api.bybit.com', OKX = 'https://www.okx.com';
-async function bybitOI(category, symbol) {
-  let rows = [], cursor = '';
-  for (let i = 0; i < 3; i++) {  // 페이지당 200건, 288봉 이상이면 최대 3쪽
-    const p = { category, symbol, intervalTime: '15min', limit: 200 };
-    if (cursor) p.cursor = cursor;
-    const j = await getJson(`${BYBIT}/v5/market/open-interest`, p);
-    rows = rows.concat(j.result.list);
-    cursor = j.result.nextPageCursor; if (!cursor) break;
+// Supabase flow_15m → { series: Map(ms → value), latest: ms }
+async function loadFlow(fromMs) {
+  const out = {}; let latest = 0;
+  for (let off = 0; off < 20000; off += 1000) {
+    const q = new URLSearchParams({ select: 't,series,value', t: 'gte.' + new Date(fromMs).toISOString(), order: 't', limit: 1000, offset: off });
+    const r = await fetch(`${SB}/rest/v1/flow_15m?${q}`, { headers: { apikey: SB_KEY } });
+    if (!r.ok) throw new Error(`Supabase HTTP ${r.status}`);
+    const rows = await r.json();
+    for (const x of rows) {
+      const t = Date.parse(x.t);
+      (out[x.series] || (out[x.series] = new Map())).set(t, x.value);
+      if (x.series.startsWith('oi_') && t > latest) latest = t;
+    }
+    if (rows.length < 1000) break;
   }
-  return rows;
-}
-async function okxLiq() {  // 최근 청산 체결을 100건씩
-  const out = []; let after = '';
-  for (let i = 0; i < 20; i++) {  // 72시간 구간을 덮을 때까지(최대 20쪽)
-    const p = { instType: 'SWAP', uly: 'BTC-USDT', state: 'filled', limit: 100 };
-    if (after) p.after = after;
-    const j = await getJson(`${OKX}/api/v5/public/liquidation-orders`, p);
-    const det = (j.data[0] && j.data[0].details) || [];
-    if (!det.length) break;
-    for (const d of det) out.push({ t: +d.ts, usd: (d.posSide === 'long' ? -1 : 1) * (+d.sz) * 0.01 * (+d.bkPx) });
-    after = String(Math.min(...det.map(d => +d.ts)));
-    if (+after < Date.now() - 288 * M15) break;
-  }
+  out.latest = latest;
   return out;
 }
 async function loadExtra() {
   const r = await Promise.allSettled([
-    bybitOI('linear', 'BTCUSDT'), bybitOI('inverse', 'BTCUSD'), okxLiq(),
     getJson(`${BYBIT}/v5/market/funding/history`, { category: 'linear', symbol: 'BTCUSDT', limit: 40 }).then(j => j.result.list),
     getJson(`${OKX}/api/v5/public/funding-rate-history`, { instId: 'BTC-USDT-SWAP', limit: 40 }).then(j => j.data),
   ]);
   const v = i => r[i].status === 'fulfilled' ? r[i].value : [];
-  return { bybitOI: v(0), bybitInv: v(1), okxLiq: v(2), bybitFund: v(3), okxFund: v(4) };
+  return { bybitFund: v(0), okxFund: v(1) };
 }
 
 const status = document.getElementById('status'), spanSel = document.getElementById('span');
@@ -313,16 +315,16 @@ async function load() {
   const span = +spanSel.value;
   history.replaceState(null, '', `?span=${span}`);
   try {
-    const [fut, spot, cb, oi, fund] = await Promise.all([
+    const [fut, spot, cb, fund] = await Promise.all([
       getJson(`${FAPI}/fapi/v1/klines`, { symbol: 'BTCUSDT', interval: '15m', limit: 1000 }),
       getJson(`${SAPI}/api/v3/klines`, { symbol: 'BTCUSDT', interval: '15m', limit: 1000 }),
       getJson(`${CB}/products/BTC-USD/candles`, { granularity: 900 }),
-      getJson(`${FAPI}/futures/data/openInterestHist`, { symbol: 'BTCUSDT', period: '15m', limit: 500 }),
       getJson(`${FAPI}/fapi/v1/fundingRate`, { symbol: 'BTCUSDT', limit: 40 }),
     ]);
     if (fut.length < span + 5 || spot.length < span) throw new Error('캔들 데이터 부족');
-    const extra = await loadExtra();
-    state = { fut, spot, cb, oi, fund, span, extra };
+    const t0 = fut[fut.length - span][0];
+    const [extra, flow] = await Promise.all([loadExtra(), loadFlow(t0).catch(() => null)]);
+    state = { fut, spot, cb, fund, span, extra, flow };
     render();
     status.textContent = `BTCUSDT · ${span}봉 · 현재가 ${fmtP(+fut[fut.length - 1][4])} · 조회 ${new Date().toLocaleString('ko-KR', { hour12: false })}`;
   } catch (e) {
