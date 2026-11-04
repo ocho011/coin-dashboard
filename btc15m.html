@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC 15분 오더플로우</title>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+nav.top { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; margin-bottom: 14px; }
+nav.top .brand { font-weight: 600; margin-right: 6px; }
+nav.top a { color: var(--ink2); text-decoration: none; padding: 2px 0; border-bottom: 2px solid transparent; }
+nav.top a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+.sub { color: var(--muted); font-size: 12px; }
+button, select { background: var(--surface); color: var(--ink2); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 12px; }
+.opt { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px; }
+#status { color: var(--ink2); font-size: 12px; min-height: 18px; }
+#status.err { color: #c93636; }
+#main { width: 100%; height: 62vh; min-height: 400px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+.grid .panel { padding: 10px; }
+.grid h2 { font-size: 13px; margin: 0 0 2px; font-weight: 600; }
+.grid .cur { color: var(--muted); font-size: 12px; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+.grid .plot { width: 100%; height: 190px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+footer li { margin: 2px 0; }
+footer a { color: inherit; }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top"><span class="brand">코인 대시보드</span><a href="../">BTC 사이클</a><a href="../heatmap/">청산 히트맵</a><a href="../cvd/">CVD 다이버전스</a><a href="./" aria-current="page">BTC 15분</a></nav>
+  <header>
+    <div>
+      <h1>BTC 15분 오더플로우</h1>
+      <div class="sub">15분봉 · EMA · 세션/전일 고저 · 거래소별 CVD · Coinbase 프리미엄 · OI · 펀딩 · 시간대 KST · 브라우저가 직접 조회</div>
+    </div>
+    <button id="themeBtn" type="button">테마 전환</button>
+  </header>
+
+  <div class="controls">
+    <label class="opt">구간 <select id="span">
+      <option value="96">24시간</option>
+      <option value="192">48시간</option>
+      <option value="288">72시간</option>
+    </select></label>
+    <button id="go" type="button">새로고침</button>
+    <span id="status"></span>
+  </div>
+
+  <section class="panel"><div id="main"></div></section>
+
+  <div class="grid">
+    <section class="panel"><h2>Coinbase 프리미엄 (%)</h2><div class="cur" id="c_prem"></div><div class="plot" id="p_prem"></div></section>
+    <section class="panel"><h2>Binance 선물 CVD (USD)</h2><div class="cur" id="c_fcvd"></div><div class="plot" id="p_fcvd"></div></section>
+    <section class="panel"><h2>Binance 현물 CVD (USD)</h2><div class="cur" id="c_scvd"></div><div class="plot" id="p_scvd"></div></section>
+    <section class="panel"><h2>Binance 선물 OI (USD)</h2><div class="cur" id="c_oi"></div><div class="plot" id="p_oi"></div></section>
+    <section class="panel"><h2>Binance 펀딩 (8시간, %)</h2><div class="cur" id="c_fund"></div><div class="plot" id="p_fund"></div></section>
+  </div>
+
+  <footer>
+    <strong>정의</strong>
+    <ul>
+      <li>CVD = 시장가 매수 체결 대금 − 시장가 매도 체결 대금의 누적. 15분봉마다 델타 = 2 × 테이커 매수 대금 − 거래 대금. 누적 시작점은 표시 구간의 첫 봉이라 절대값이 아니라 기울기와 상대 위치를 본다.</li>
+      <li>Coinbase 프리미엄 = (Coinbase BTC-USD 종가 ÷ Binance 현물 BTCUSDT 종가 − 1) × 100. Binance가 USDT 호가이므로 USDT/USD 괴리가 섞인다. 음수면 Coinbase가 싸다.</li>
+      <li>세션 박스(UTC 기준, 코드 상단 <code>SESSIONS</code>에서 변경): 아시아 00–08시, 런던 07–16시, 뉴욕 13–22시. 박스는 세션 중 고가·저가 범위, 점선은 진행 중이면 현재까지의 고저. PDH·PDL은 직전 UTC 일(00–24시)의 고가·저가.</li>
+      <li>EMA는 표시 구간 앞의 봉까지 포함해 계산한다(최대 1000봉 조회).</li>
+    </ul>
+    <strong>한계</strong>
+    <ul>
+      <li>CVD·OI·펀딩은 Binance 한 곳의 값이다. 다른 거래소의 선물/현물·합산 OI·합산 청산·Hyperliquid·Coinbase CVD는 이 페이지에 없다(공개 API로 브라우저에서 안정적으로 얻기 어렵다).</li>
+      <li>세션 시간대 정의는 사람마다 다르다. 위 값은 이 페이지의 가정이다.</li>
+      <li>OI는 Binance openInterestHist(15분, 최근 약 5일 이내 구간만 사용). 펀딩은 8시간 간격이라 최근 30회(약 10일)를 따로 보여 준다.</li>
+      <li>마지막 봉은 진행 중이다. 일부 지역에서는 Binance 접속이 차단된다. 참고용 시각화이며 투자 조언이 아니다.</li>
+      <li>데이터: Binance 공개 API, Coinbase Exchange 공개 API. 차트: <a href="https://github.com/plotly/plotly.js" target="_blank" rel="noopener">Plotly.js</a> (MIT).</li>
+    </ul>
+  </footer>
+</main>
+<script>
+const FAPI = 'https://fapi.binance.com', SAPI = 'https://api.binance.com', CB = 'https://api.exchange.coinbase.com';
+const UP = '#0ecb81', DOWN = '#f6465d';
+const M15 = 900000, DAY = 86400000, KST = 9 * 3600000;
+const EMAS = [[20, '#7fd1c1'], [50, '#a9a9d6'], [100, '#d6c38a'], [200, '#9aa7c9']];
+// UTC 시(hour) 기준 [시작, 끝)
+const SESSIONS = [
+  { name: '아시아', s: 0, e: 8, color: '#d6849b' },
+  { name: '런던', s: 7, e: 16, color: '#5fb5a0' },
+  { name: '뉴욕', s: 13, e: 22, color: '#d9a05b' },
+];
+
+async function getJson(url, params) {
+  const r = await fetch(`${url}${params ? '?' + new URLSearchParams(params) : ''}`);
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body && (body.msg || body.message) ? (body.msg || body.message) : `HTTP ${r.status}`);
+  return body;
+}
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const kst = t => new Date(t + KST).toISOString().slice(0, 16).replace('T', ' ');
+const fmtS = v => { const a = Math.abs(v), sg = v < 0 ? '−' : '+';
+  return sg + (a >= 1e9 ? (a / 1e9).toFixed(2) + 'B' : a >= 1e6 ? (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(1) + 'K' : a.toFixed(1)); };
+const fmtP = p => p.toLocaleString('en-US', { maximumFractionDigits: 1 });
+const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
+
+function ema(vals, n) {
+  const k = 2 / (n + 1), out = [];
+  let e = null;
+  for (let i = 0; i < vals.length; i++) {
+    e = e === null ? vals[i] : vals[i] * k + e * (1 - k);
+    out.push(i < n - 1 ? null : e);
+  }
+  return out;
+}
+const delta = k => 2 * +k[10] - +k[7];  // 테이커 매수 대금 × 2 − 거래 대금 (USD)
+function cum(rows, from) {
+  let c = 0;
+  return rows.slice(from).map(k => (c += delta(k)));
+}
+
+function baseLayout(extra) {
+  return { paper_bgcolor: css('--surface'), plot_bgcolor: css('--surface'), font: { color: css('--ink2'), size: 11 },
+    margin: { l: 8, r: 58, t: 6, b: 30 }, showlegend: false, hovermode: 'x unified', dragmode: 'pan', ...extra };
+}
+const axis = extra => ({ gridcolor: css('--grid'), zerolinecolor: css('--axis'), ...extra });
+const cfg = { responsive: true, displaylogo: false, displayModeBar: false };
+
+const ticks = x => { const v = [x[0], x[x.length >> 1], x[x.length - 1]]; return { tickmode: 'array', tickvals: v, ticktext: v.map(t => t.slice(5)) }; };
+let state = null;
+function render() {
+  if (!state) return;
+  const { fut, spot, cb, oi, fund, span } = state;
+  const from = fut.length - span;
+  const bars = fut.slice(from), xs = bars.map(k => kst(k[0]));
+  const close = fut.map(k => +k[4]);
+
+  // 세션 고저, PDH/PDL
+  const t0 = bars[0][0], tN = bars[bars.length - 1][0] + M15;
+  const shapes = [], ann = [];
+  const dayStart = Math.floor((tN - 1) / DAY) * DAY, pdStart = dayStart - DAY;
+  const pd = fut.filter(k => k[0] >= pdStart && k[0] < dayStart);
+  if (pd.length) {
+    const pdh = Math.max(...pd.map(k => +k[2])), pdl = Math.min(...pd.map(k => +k[3]));
+    for (const [v, name] of [[pdh, 'PDH'], [pdl, 'PDL']]) {
+      shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: v, y1: v, line: { color: css('--muted'), width: 1, dash: 'dash' } });
+      ann.push({ xref: 'paper', x: 1, xanchor: 'left', yref: 'y', y: v, text: name, showarrow: false, font: { size: 11, color: css('--muted') } });
+    }
+  }
+  for (let d = Math.floor(t0 / DAY) * DAY - DAY; d <= tN; d += DAY) {
+    for (const s of SESSIONS) {
+      const a = d + s.s * 3600000, b = d + s.e * 3600000;
+      if (b <= t0 || a >= tN) continue;
+      const rs = fut.filter(k => k[0] >= a && k[0] < b);
+      if (!rs.length) continue;
+      const hi = Math.max(...rs.map(k => +k[2])), lo = Math.min(...rs.map(k => +k[3]));
+      const xa = kst(Math.max(a, rs[0][0])), xb = kst(Math.min(b, rs[rs.length - 1][0] + M15));
+      shapes.push({ type: 'rect', xref: 'x', yref: 'y', x0: xa, x1: xb, y0: lo, y1: hi,
+        fillcolor: alpha(s.color, 0.10), line: { color: alpha(s.color, 0.6), width: 1, dash: 'dot' }, layer: 'below' });
+      ann.push({ xref: 'x', yref: 'y', x: xa, y: hi, text: s.name, showarrow: false, xanchor: 'left', yanchor: 'bottom',
+        font: { size: 10, color: s.color } });
+    }
+  }
+
+  const traces = [{ type: 'candlestick', x: xs, open: bars.map(k => +k[1]), high: bars.map(k => +k[2]),
+    low: bars.map(k => +k[3]), close: bars.map(k => +k[4]), name: 'BTC',
+    increasing: { line: { color: UP }, fillcolor: UP }, decreasing: { line: { color: DOWN }, fillcolor: DOWN } }];
+  for (const [n, color] of EMAS) {
+    traces.push({ type: 'scatter', mode: 'lines', x: xs, y: ema(close, n).slice(from), name: `EMA ${n}`,
+      line: { color, width: 1.2 }, hoverinfo: 'skip' });
+  }
+  Plotly.react('main', traces, baseLayout({
+    margin: { l: 8, r: 58, t: 24, b: 36 }, showlegend: true, legend: { orientation: 'h', y: 1.06, x: 0 },
+    xaxis: { type: 'category', nticks: 8, rangeslider: { visible: false }, gridcolor: css('--grid') },
+    yaxis: axis({ side: 'right', tickformat: ',.0f', autorange: true }), shapes, annotations: ann,
+  }), cfg);
+
+  // 소형 패널은 모두 같은 구간·카테고리 축
+  const small = (id, curId, traces, curText, yextra) => {
+    Plotly.react(id, traces, baseLayout({
+      xaxis: { type: 'category', gridcolor: css('--grid'), tickangle: 0, ...ticks(traces[0].x) },
+      yaxis: axis({ side: 'right', exponentformat: 'B', ...yextra }),
+    }), cfg);
+    document.getElementById(curId).textContent = curText;
+  };
+  
+  // Coinbase 프리미엄
+  const cbMap = new Map(cb.map(c => [c[0] * 1000, c[4]]));
+  const prem = bars.map((k, i) => {
+    const s = spot[spot.length - span + i], c = s && cbMap.get(s[0]);
+    return c ? (c / +s[4] - 1) * 100 : null;
+  });
+  const pl = prem.filter(v => v !== null).pop();
+  small('p_prem', 'c_prem', [{ type: 'bar', x: xs, y: prem, marker: { color: prem.map(v => v >= 0 ? UP : DOWN) },
+    hovertemplate: '%{y:.4f}%<extra></extra>' }], pl === undefined ? '데이터 없음' : `최근 ${pl.toFixed(4)}%`, { ticksuffix: '%' });
+
+  // CVD
+  for (const [id, curId, rows, color] of [['p_fcvd', 'c_fcvd', fut, '#d6849b'], ['p_scvd', 'c_scvd', spot, '#5fb5a0']]) {
+    const c = cum(rows.slice(rows.length - span), 0);
+    small(id, curId, [{ type: 'scatter', mode: 'lines', x: xs, y: c, line: { color, width: 1.6 },
+      hovertemplate: '%{y:,.0f}<extra></extra>' }], `구간 누적 ${fmtS(c[c.length - 1])}`);
+  }
+
+  // OI
+  const oiPts = oi.filter(o => o.timestamp >= t0);
+  small('p_oi', 'c_oi', [{ type: 'scatter', mode: 'lines', x: oiPts.map(o => kst(o.timestamp)), y: oiPts.map(o => +o.sumOpenInterestValue),
+    line: { color: '#7fa3c9', width: 1.6 }, hovertemplate: '%{y:,.0f}<extra></extra>' }],
+    oiPts.length ? `최근 ${fmtS(+oiPts[oiPts.length - 1].sumOpenInterestValue).slice(1)}` : '데이터 없음',
+    { tickformat: '.3s' });
+
+  // 펀딩(최근 30회, 8시간 간격 — 15분 구간과 별도)
+  const fr = fund.map(f => +f.fundingRate * 100);
+  small('p_fund', 'c_fund', [{ type: 'bar', x: fund.map(f => kst(+f.fundingTime)), y: fr, marker: { color: fr.map(v => v >= 0 ? UP : DOWN) },
+    hovertemplate: '%{y:.4f}%<extra></extra>' }], `최근 ${fr[fr.length - 1].toFixed(4)}% · 최근 ${fund.length}회`, { ticksuffix: '%' });
+}
+
+const status = document.getElementById('status'), spanSel = document.getElementById('span');
+async function load() {
+  status.className = ''; status.textContent = '불러오는 중…';
+  const span = +spanSel.value;
+  history.replaceState(null, '', `?span=${span}`);
+  try {
+    const [fut, spot, cb, oi, fund] = await Promise.all([
+      getJson(`${FAPI}/fapi/v1/klines`, { symbol: 'BTCUSDT', interval: '15m', limit: 1000 }),
+      getJson(`${SAPI}/api/v3/klines`, { symbol: 'BTCUSDT', interval: '15m', limit: 1000 }),
+      getJson(`${CB}/products/BTC-USD/candles`, { granularity: 900 }),
+      getJson(`${FAPI}/futures/data/openInterestHist`, { symbol: 'BTCUSDT', period: '15m', limit: 500 }),
+      getJson(`${FAPI}/fapi/v1/fundingRate`, { symbol: 'BTCUSDT', limit: 30 }),
+    ]);
+    if (fut.length < span + 5 || spot.length < span) throw new Error('캔들 데이터 부족');
+    state = { fut, spot, cb, oi, fund, span };
+    render();
+    status.textContent = `BTCUSDT · ${span}봉 · 현재가 ${fmtP(+fut[fut.length - 1][4])} · 조회 ${new Date().toLocaleString('ko-KR', { hour12: false })}`;
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = `불러오기 실패: ${e.message}. Binance/Coinbase 접속이 차단된 지역인지 확인하세요.`;
+  }
+}
+
+const q = new URLSearchParams(location.search);
+if (['96', '192', '288'].includes(q.get('span'))) spanSel.value = q.get('span');
+document.getElementById('go').onclick = load;
+spanSel.onchange = load;
+document.getElementById('themeBtn').onclick = () => {
+  const el = document.documentElement;
+  const dark = el.dataset.theme ? el.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  el.dataset.theme = dark ? 'light' : 'dark';
+  render();
+};
+load();
+</script>
+</body>
+</html>
